@@ -2,8 +2,14 @@
 Message classifier to categorize job types
 """
 import re
-from config import JOB_KEYWORDS
-from utils.logger import get_logger
+import sys
+import os
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from config.settings import JOB_KEYWORDS
+from src.utils.logger import get_logger
 
 logger = get_logger('classifier')
 

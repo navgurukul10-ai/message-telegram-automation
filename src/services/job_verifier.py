@@ -2,8 +2,14 @@
 Job verification and company information extraction
 """
 import re
-from utils.logger import get_logger
-from config import JOB_VERIFICATION, MIN_JOB_DESCRIPTION_LENGTH
+import sys
+import os
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from src.utils.logger import get_logger
+from config.settings import JOB_VERIFICATION, MIN_JOB_DESCRIPTION_LENGTH
 
 logger = get_logger('job_verifier')
 

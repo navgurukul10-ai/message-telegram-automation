@@ -3,9 +3,14 @@ CSV export handler for messages and groups
 """
 import csv
 import os
+import sys
 from datetime import datetime
-from config import PATHS, CSV_COLUMNS
-from utils.logger import get_logger
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from config.settings import PATHS, CSV_COLUMNS
+from src.utils.logger import get_logger
 
 logger = get_logger('csv_handler')
 

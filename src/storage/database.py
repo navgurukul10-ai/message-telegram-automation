@@ -3,9 +3,14 @@ Database handler for storing messages and group data
 """
 import sqlite3
 import os
+import sys
 from datetime import datetime
-from config import DATABASE, PATHS
-from utils.logger import get_logger
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from config.settings import DATABASE, PATHS
+from src.utils.logger import get_logger
 
 logger = get_logger('database')
 

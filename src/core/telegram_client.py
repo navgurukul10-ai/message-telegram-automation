@@ -12,13 +12,15 @@ from telethon.errors import (
     ChatWriteForbiddenError, ChannelInvalidError
 )
 from telethon.tl.types import Channel, Chat
+from telethon.tl.functions.channels import JoinChannelRequest
+from telethon.tl.functions.messages import ImportChatInviteRequest
 
-from config import ACCOUNTS, RATE_LIMITS, MESSAGE_YEAR_FILTER, PATHS
-from utils.logger import get_logger
-from utils.database import DatabaseHandler
-from utils.classifier import MessageClassifier
-from utils.csv_handler import CSVHandler
-from utils.job_verifier import JobVerifier
+from config.settings import ACCOUNTS, RATE_LIMITS, MESSAGE_YEAR_FILTER, PATHS
+from src.utils.logger import get_logger
+from src.storage.database import DatabaseHandler
+from src.services.classifier import MessageClassifier
+from src.storage.csv_handler import CSVHandler
+from src.services.job_verifier import JobVerifier
 
 logger = get_logger('telegram_client')
 
@@ -152,17 +154,23 @@ class TelegramJobFetcher:
             client = client_info['client']
             account = client_info['account']
             
-            # Extract username from link
+            # Extract username from link and join
             if 'joinchat' in group_link or '+' in group_link:
                 # Private group with invite link
-                entity = await client.get_entity(group_link)
+                # Extract hash from link
+                invite_hash = group_link.split('/')[-1].replace('+', '')
+                result = await client(ImportChatInviteRequest(invite_hash))
+                entity = result.chats[0] if result.chats else None
+                if not entity:
+                    raise Exception("Could not join private group")
             else:
                 # Public group
                 username = group_link.split('/')[-1]
                 entity = await client.get_entity(username)
-            
-            # Join the group
-            await client(entity)
+                # Join the channel/group
+                if isinstance(entity, Channel):
+                    await client(JoinChannelRequest(entity))
+                # For Chat type, we're already in after get_entity
             
             group_name = entity.title if hasattr(entity, 'title') else username
             

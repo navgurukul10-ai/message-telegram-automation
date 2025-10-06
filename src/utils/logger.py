@@ -3,8 +3,13 @@ Logging utility for the Telegram automation system
 """
 import logging
 import os
+import sys
 from datetime import datetime
-from config import LOGGING, PATHS
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from config.settings import LOGGING, PATHS
 
 class Logger:
     """Custom logger with file and console output"""
