@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.settings import PATHS, DATABASE
+from src.services.job_scorer import JobQualityScorer
 
 app = Flask(__name__)
 
@@ -34,23 +35,22 @@ def get_stats():
     cursor = conn.cursor()
     
     # Overall stats
-    cursor.execute("SELECT COUNT(*) FROM tech_jobs")
+    # Get counts from messages table
+    cursor.execute("SELECT COUNT(*) FROM messages WHERE job_type LIKE '%tech%' AND job_type NOT LIKE '%non_tech%'")
     tech_count = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(*) FROM non_tech_jobs")
+    cursor.execute("SELECT COUNT(*) FROM messages WHERE job_type = 'non_tech'")
     non_tech_count = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(*) FROM freelance_jobs")
+    cursor.execute("SELECT COUNT(*) FROM messages WHERE job_type LIKE '%freelance%'")
     freelance_count = cursor.fetchone()[0]
     
     cursor.execute("SELECT COUNT(*) FROM groups")
     groups_count = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(*) FROM tech_jobs WHERE is_verified = 1")
-    verified_count = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT AVG(verification_score) FROM tech_jobs")
-    avg_score = cursor.fetchone()[0] or 0
+    # Since we don't have verification_score in messages table
+    verified_count = 0
+    avg_score = 0
     
     conn.close()
     
@@ -65,17 +65,18 @@ def get_stats():
 
 @app.route('/api/daily_stats')
 def get_daily_stats():
-    """Get date-wise statistics"""
+    """Get date-wise statistics based on when messages were fetched"""
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Get data for last 30 days
+    # Get data for last 30 days using created_at (fetch date) and job_type column
     cursor.execute("""
         SELECT 
             DATE(created_at) as date,
-            COUNT(DISTINCT CASE WHEN message_id IN (SELECT message_id FROM tech_jobs) THEN message_id END) as tech,
-            COUNT(DISTINCT CASE WHEN message_id IN (SELECT message_id FROM non_tech_jobs) THEN message_id END) as non_tech,
-            COUNT(DISTINCT CASE WHEN message_id IN (SELECT message_id FROM freelance_jobs) THEN message_id END) as freelance
+            COUNT(CASE WHEN job_type LIKE '%tech%' AND job_type NOT LIKE '%non_tech%' THEN 1 END) as tech,
+            COUNT(CASE WHEN job_type = 'non_tech' THEN 1 END) as non_tech,
+            COUNT(CASE WHEN job_type LIKE '%freelance%' THEN 1 END) as freelance,
+            COUNT(*) as total_fetched
         FROM messages
         WHERE created_at >= date('now', '-30 days')
         GROUP BY DATE(created_at)
@@ -125,46 +126,87 @@ def get_groups_by_date():
 
 @app.route('/api/best_jobs')
 def get_best_jobs():
-    """Get best verified jobs"""
+    """Get best quality jobs (score >= 60) - both tech and non-tech"""
     conn = get_db_connection()
     cursor = conn.cursor()
     
+    # Get all recent jobs
     cursor.execute("""
         SELECT 
             message_text,
-            company_name,
-            company_website,
-            skills_required,
-            salary_range,
-            job_location,
-            work_mode,
-            verification_score,
+            job_type,
+            keywords_found,
             date,
-            group_name
-        FROM tech_jobs
-        WHERE is_verified = 1 
-        AND company_name != ''
-        ORDER BY verification_score DESC
-        LIMIT 50
+            group_name,
+            sender,
+            account_used
+        FROM messages
+        WHERE job_type IS NOT NULL 
+        AND job_type != ''
+        ORDER BY date DESC
+        LIMIT 200
     """)
     
-    jobs = []
-    for row in cursor.fetchall():
-        jobs.append({
-            'message': row['message_text'][:200],
-            'company': row['company_name'],
-            'website': row['company_website'],
-            'skills': row['skills_required'],
-            'salary': row['salary_range'],
-            'location': row['job_location'],
-            'work_mode': row['work_mode'],
-            'score': round(row['verification_score'], 2),
-            'date': row['date'],
-            'group': row['group_name']
-        })
+    # Score each job
+    scorer = JobQualityScorer()
+    scored_jobs = []
     
+    for row in cursor.fetchall():
+        message_text = row['message_text']
+        score_result = scorer.score_job(message_text)
+
+        # Additional strict backend safeguard: if message mentions international
+        # locations but has no remote/WFH keywords, exclude from best jobs
+        msg_lower = (message_text or '').lower()
+        international_keywords = [
+            'usa', 'us', 'united states', 'uk', 'united kingdom', 'singapore', 'dubai', 'uae',
+            'canada', 'australia', 'germany', 'netherlands', 'europe', 'london', 'new york',
+            'san francisco', 'toronto', 'sydney', 'melbourne', 'algeria', 'algiers', 'france',
+            'spain', 'italy', 'japan', 'china', 'brazil', 'mexico', 'south africa', 'egypt',
+            'turkey', 'russia', 'poland', 'sweden', 'norway', 'denmark', 'finland', 'belgium',
+            'switzerland', 'austria', 'ireland', 'portugal', 'greece', 'czech', 'hungary',
+            'romania', 'bulgaria', 'croatia', 'slovenia', 'slovakia', 'estonia', 'latvia',
+            'lithuania', 'malta', 'cyprus', 'luxembourg', 'iceland', 'new zealand', 'south korea',
+            'thailand', 'vietnam', 'philippines', 'indonesia', 'malaysia', 'taiwan', 'hong kong',
+            'israel', 'saudi arabia', 'qatar', 'kuwait', 'bahrain', 'oman', 'jordan', 'lebanon',
+            'argentina', 'chile', 'colombia', 'peru', 'venezuela', 'uruguay', 'paraguay',
+            'bolivia', 'ecuador', 'guyana', 'suriname', 'trinidad', 'jamaica', 'cuba',
+            'dominican republic', 'haiti', 'panama', 'costa rica', 'guatemala', 'honduras',
+            'nicaragua', 'el salvador', 'belize', 'bahamas', 'barbados', 'antigua', 'grenada',
+            'st. lucia', 'st. vincent', 'dominica', 'st. kitts', 'nevis', 'montserrat',
+            'anguilla', 'british virgin islands', 'us virgin islands', 'puerto rico',
+            'cayman islands', 'bermuda', 'turks and caicos', 'aruba', 'curacao', 'bonaire',
+            'sint maarten', 'saba', 'sint eustatius', 'greenland', 'faroe islands'
+        ]
+        remote_keywords = ['remote', 'wfh', 'work from home', 'work-from-home', 'hybrid']
+        is_international_msg = any(k in msg_lower for k in international_keywords)
+        has_remote_msg = any(k in msg_lower for k in remote_keywords)
+
+        # If international mentioned but no remote, force skip regardless of score
+        if is_international_msg and not has_remote_msg:
+            continue
+
+        # Only include jobs with score >= 60
+        if score_result['total_score'] >= 60:
+            scored_jobs.append({
+                'message': row['message_text'],
+                'company': score_result['company_name'] or 'Company Not Specified',
+                'skills': score_result['skills_info'] or row['keywords_found'],
+                'salary': score_result['salary_info'] or '',
+                'work_mode': 'Remote' if score_result['has_remote'] else '',
+                'location': score_result['location_info'] or '',
+                'score': score_result['total_score'],
+                'date': row['date'],
+                'group': row['group_name'],
+                'apply_link': score_result['apply_link']
+            })
+    
+    # Sort by score (highest first)
+    scored_jobs.sort(key=lambda x: x['score'], reverse=True)
+    
+    # Return top 50
     conn.close()
-    return jsonify(jobs)
+    return jsonify(scored_jobs[:50])
 
 @app.route('/api/messages/<job_type>')
 def get_messages(job_type):
@@ -172,44 +214,128 @@ def get_messages(job_type):
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    table_map = {
-        'tech': 'tech_jobs',
-        'non_tech': 'non_tech_jobs',
-        'freelance': 'freelance_jobs'
-    }
-    
-    table = table_map.get(job_type, 'tech_jobs')
-    
-    cursor.execute(f"""
-        SELECT 
-            message_text,
-            company_name,
-            skills_required,
-            salary_range,
-            work_mode,
-            verification_score,
-            date,
-            group_name
-        FROM {table}
-        ORDER BY date DESC
-        LIMIT 100
-    """)
+    # Query messages table based on job_type
+    if job_type == 'tech':
+        cursor.execute("""
+            SELECT 
+                message_text,
+                job_type,
+                keywords_found,
+                date,
+                group_name,
+                sender,
+                account_used
+            FROM messages
+            WHERE job_type LIKE '%tech%' AND job_type NOT LIKE '%non_tech%'
+            ORDER BY date DESC
+            LIMIT 100
+        """)
+    elif job_type == 'non_tech':
+        cursor.execute("""
+            SELECT 
+                message_text,
+                job_type,
+                keywords_found,
+                date,
+                group_name,
+                sender,
+                account_used
+            FROM messages
+            WHERE job_type = 'non_tech'
+            ORDER BY date DESC
+            LIMIT 100
+        """)
+    elif job_type == 'freelance':
+        cursor.execute("""
+            SELECT 
+                message_text,
+                job_type,
+                keywords_found,
+                date,
+                group_name,
+                sender,
+                account_used
+            FROM messages
+            WHERE job_type LIKE '%freelance%'
+            ORDER BY date DESC
+            LIMIT 100
+        """)
+    else:
+        # Default to tech
+        cursor.execute("""
+            SELECT 
+                message_text,
+                job_type,
+                keywords_found,
+                date,
+                group_name,
+                sender,
+                account_used
+            FROM messages
+            WHERE job_type LIKE '%tech%' AND job_type NOT LIKE '%non_tech%'
+            ORDER BY date DESC
+            LIMIT 100
+        """)
     
     messages = []
     for row in cursor.fetchall():
         messages.append({
             'text': row['message_text'],
-            'company': row['company_name'],
-            'skills': row['skills_required'],
-            'salary': row['salary_range'],
-            'work_mode': row['work_mode'],
-            'score': round(row['verification_score'], 2) if row['verification_score'] else 0,
+            'company': 'Company Not Specified',  # Extract from message if needed
+            'skills': row['keywords_found'],
+            'salary': '',  # Extract from message if needed
+            'work_mode': '',  # Extract from message if needed
+            'score': 0,  # No verification score available
             'date': row['date'],
             'group': row['group_name']
         })
     
     conn.close()
     return jsonify(messages)
+
+@app.route('/api/group_details/<group_name>')
+def get_group_details(group_name):
+    """Get detailed information about a specific group"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Get all messages from this group
+    cursor.execute("""
+        SELECT 
+            message_text,
+            date,
+            job_type,
+            keywords_found
+        FROM messages
+        WHERE group_name = ?
+        ORDER BY date DESC
+    """, (group_name,))
+    
+    messages = []
+    for row in cursor.fetchall():
+        messages.append({
+            'text': row['message_text'],
+            'date': row['date'],
+            'job_type': row['job_type'],
+            'keywords': row['keywords_found']
+        })
+    
+    # Get first and last message dates
+    first_message = "N/A"
+    last_message = "N/A"
+    
+    if messages:
+        first_message = messages[-1]['date'][:10]  # First message (oldest)
+        last_message = messages[0]['date'][:10]    # Last message (newest)
+    
+    conn.close()
+    
+    return jsonify({
+        'messages': messages,
+        'firstMessage': first_message,
+        'lastMessage': last_message,
+        'totalCount': len(messages)
+    })
 
 if __name__ == '__main__':
     print("="*60)

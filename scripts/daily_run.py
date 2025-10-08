@@ -1,6 +1,7 @@
 """
 Daily Run Script - Run for one day at a time
 Modified version that runs for just today instead of 30 days
+Includes automatic maintenance: job type fixing and CSV sync
 """
 import asyncio
 import sys
@@ -12,17 +13,31 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.core.telegram_client import TelegramJobFetcher
 from src.utils.logger import get_logger
+from src.utils.maintenance import perform_maintenance
 
 logger = get_logger('daily_run')
 
 async def daily_main():
-    """Run fetcher for today only"""
+    """Run fetcher for today only with automatic maintenance"""
     try:
         logger.info("="*60)
         logger.info("Telegram Job Fetcher - DAILY MODE")
         logger.info("="*60)
         
-        # Initialize fetcher
+        # Step 1: Perform maintenance (fix job types + sync CSV)
+        logger.info("Performing automatic maintenance...")
+        maintenance_results = perform_maintenance()
+        
+        if maintenance_results:
+            fixed = maintenance_results.get('job_types_fixed', 0)
+            if fixed > 0:
+                logger.info(f"✅ Fixed {fixed} empty job types")
+            
+            csv_sync = maintenance_results.get('csv_sync', {})
+            if csv_sync:
+                logger.info(f"✅ CSV files synced with database")
+        
+        # Step 2: Initialize fetcher
         fetcher = TelegramJobFetcher()
         
         # Initialize clients
@@ -38,8 +53,12 @@ async def daily_main():
         logger.info(f"Groups limit: 8 groups today")
         logger.info(f"You can run this script daily for continuous operation")
         
-        # Run for just 1 day
+        # Step 3: Run for just 1 day
         await fetcher.run_continuous(duration_days=1)
+        
+        # Step 4: Final maintenance after fetching
+        logger.info("Performing final CSV sync...")
+        perform_maintenance()
         
         logger.info("Today's fetching completed!")
         logger.info("Run again tomorrow to continue!")

@@ -65,40 +65,77 @@ class TelegramJobFetcher:
         logger.info("Initializing Telegram clients...")
         
         for account in self.accounts:
-            try:
-                session_path = os.path.join(PATHS['sessions'], account['session_name'])
-                
-                client = TelegramClient(
-                    session_path,
-                    account['api_id'],
-                    account['api_hash']
-                )
-                
-                await client.connect()
-                
-                if not await client.is_user_authorized():
-                    logger.warning(f"Account {account['name']} needs authorization")
-                    await client.send_code_request(account['phone'])
-                    logger.info(f"Code sent to {account['phone']}. Please check your Telegram app.")
-                    
-                    # Wait for user to enter code
-                    code = input(f"Enter the code for {account['name']} ({account['phone']}): ")
-                    await client.sign_in(account['phone'], code)
-                    
-                    logger.info(f"Account {account['name']} authorized successfully")
-                else:
-                    logger.info(f"Account {account['name']} already authorized")
-                
-                self.clients.append({
-                    'client': client,
-                    'account': account,
-                    'last_action': None,
-                    'groups_joined_today': 0,
-                    'messages_fetched_today': 0
-                })
+            max_retries = 3
+            retry_delay = 10
             
-            except Exception as e:
-                logger.error(f"Failed to initialize {account['name']}: {e}")
+            for attempt in range(max_retries):
+                try:
+                    session_path = os.path.join(PATHS['sessions'], account['session_name'])
+                    
+                    # Create client with longer timeout settings
+                    client = TelegramClient(
+                        session_path,
+                        account['api_id'],
+                        account['api_hash'],
+                        connection_retries=5,
+                        retry_delay=3,
+                        timeout=30,  # Increase timeout to 30 seconds
+                        request_retries=3
+                    )
+                    
+                    # Try to connect with timeout handling
+                    logger.info(f"Connecting {account['name']} (attempt {attempt + 1}/{max_retries})...")
+                    await asyncio.wait_for(client.connect(), timeout=60)
+                    
+                    if not await client.is_user_authorized():
+                        logger.warning(f"Account {account['name']} needs authorization")
+                        await client.send_code_request(account['phone'])
+                        logger.info(f"Code sent to {account['phone']}. Please check your Telegram app.")
+                        
+                        # Wait for user to enter code
+                        code = input(f"Enter the code for {account['name']} ({account['phone']}): ")
+                        await client.sign_in(account['phone'], code)
+                        
+                        logger.info(f"Account {account['name']} authorized successfully")
+                    else:
+                        logger.info(f"Account {account['name']} already authorized")
+                    
+                    self.clients.append({
+                        'client': client,
+                        'account': account,
+                        'last_action': None,
+                        'groups_joined_today': 0,
+                        'messages_fetched_today': 0
+                    })
+                    
+                    # Success! Break the retry loop
+                    break
+                
+                except asyncio.TimeoutError:
+                    logger.warning(f"Timeout connecting {account['name']} (attempt {attempt + 1}/{max_retries})")
+                    if attempt < max_retries - 1:
+                        logger.info(f"Retrying in {retry_delay} seconds...")
+                        await asyncio.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                    else:
+                        logger.error(f"Failed to connect {account['name']} after {max_retries} attempts")
+                        try:
+                            await client.disconnect()
+                        except:
+                            pass
+                
+                except Exception as e:
+                    logger.error(f"Failed to initialize {account['name']}: {e}")
+                    if attempt < max_retries - 1:
+                        logger.info(f"Retrying in {retry_delay} seconds...")
+                        await asyncio.sleep(retry_delay)
+                        retry_delay *= 2
+                    else:
+                        logger.error(f"Giving up on {account['name']} after {max_retries} attempts")
+                    try:
+                        await client.disconnect()
+                    except:
+                        pass
         
         logger.info(f"Initialized {len(self.clients)} clients successfully")
     
@@ -159,17 +196,26 @@ class TelegramJobFetcher:
                 # Private group with invite link
                 # Extract hash from link
                 invite_hash = group_link.split('/')[-1].replace('+', '')
-                result = await client(ImportChatInviteRequest(invite_hash))
+                result = await asyncio.wait_for(
+                    client(ImportChatInviteRequest(invite_hash)), 
+                    timeout=60
+                )
                 entity = result.chats[0] if result.chats else None
                 if not entity:
                     raise Exception("Could not join private group")
             else:
                 # Public group
                 username = group_link.split('/')[-1]
-                entity = await client.get_entity(username)
+                entity = await asyncio.wait_for(
+                    client.get_entity(username),
+                    timeout=60
+                )
                 # Join the channel/group
                 if isinstance(entity, Channel):
-                    await client(JoinChannelRequest(entity))
+                    await asyncio.wait_for(
+                        client(JoinChannelRequest(entity)),
+                        timeout=60
+                    )
                 # For Chat type, we're already in after get_entity
             
             group_name = entity.title if hasattr(entity, 'title') else username
@@ -205,6 +251,10 @@ class TelegramJobFetcher:
             logger.info(f"Successfully joined group: {group_name} using {account['name']}")
             return True
         
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout joining group {group_link}")
+            return False
+        
         except FloodWaitError as e:
             logger.warning(f"FloodWait error: need to wait {e.seconds} seconds")
             await asyncio.sleep(e.seconds)
@@ -228,12 +278,18 @@ class TelegramJobFetcher:
             client = client_info['client']
             account = client_info['account']
             
-            # Get entity
+            # Get entity with timeout
             if 'joinchat' in group_link or '+' in group_link:
-                entity = await client.get_entity(group_link)
+                entity = await asyncio.wait_for(
+                    client.get_entity(group_link),
+                    timeout=60
+                )
             else:
                 username = group_link.split('/')[-1]
-                entity = await client.get_entity(username)
+                entity = await asyncio.wait_for(
+                    client.get_entity(username),
+                    timeout=60
+                )
             
             group_name = entity.title if hasattr(entity, 'title') else username
             
@@ -309,6 +365,10 @@ class TelegramJobFetcher:
             
             logger.info(f"Fetched {new_messages_count} new job messages from {group_name}")
             return messages
+        
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout fetching messages from {group_link}")
+            return []
         
         except FloodWaitError as e:
             logger.warning(f"FloodWait error: need to wait {e.seconds} seconds")

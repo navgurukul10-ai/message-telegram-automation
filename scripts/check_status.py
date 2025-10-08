@@ -33,35 +33,27 @@ def check_status():
     total_messages = cursor.fetchone()[0]
     print(f"📊 Total Messages Fetched: {total_messages}")
     
-    # Messages by category (from separate tables)
-    print("\n📈 Jobs by Category (Separate Tables):")
-    cursor.execute("SELECT COUNT(*) FROM tech_jobs")
+    # Messages by category (from messages.job_type)
+    print("\n📈 Jobs by Category (messages.job_type):")
+    cursor.execute("SELECT COUNT(*) FROM messages WHERE job_type LIKE '%tech%' AND job_type NOT LIKE '%non_tech%'")
     tech_count = cursor.fetchone()[0]
     print(f"   • Tech Jobs: {tech_count}")
     
-    cursor.execute("SELECT COUNT(*) FROM non_tech_jobs")
+    cursor.execute("SELECT COUNT(*) FROM messages WHERE job_type = 'non_tech'")
     non_tech_count = cursor.fetchone()[0]
     print(f"   • Non-Tech Jobs: {non_tech_count}")
     
-    cursor.execute("SELECT COUNT(*) FROM freelance_jobs")
+    cursor.execute("SELECT COUNT(*) FROM messages WHERE job_type LIKE '%freelance%'")
     freelance_count = cursor.fetchone()[0]
     print(f"   • Freelance Jobs: {freelance_count}")
     
-    # Verification stats
+    # Verification stats (not available in messages table)
     print("\n✅ Verification Statistics:")
-    cursor.execute("SELECT COUNT(*) FROM tech_jobs WHERE is_verified = 1")
-    verified_tech = cursor.fetchone()[0]
-    print(f"   • Verified Tech Jobs: {verified_tech}/{tech_count}")
+    print(f"   • Verified Tech Jobs: N/A")
+    print(f"   • Average Verification Score: N/A")
     
-    cursor.execute("SELECT AVG(verification_score) FROM tech_jobs")
-    avg_score = cursor.fetchone()[0]
-    if avg_score:
-        print(f"   • Average Verification Score: {avg_score:.2f}%")
-    
-    # Jobs with company info
-    cursor.execute("SELECT COUNT(*) FROM tech_jobs WHERE company_name != ''")
-    with_company = cursor.fetchone()[0]
-    print(f"   • Jobs with Company Name: {with_company}/{tech_count}")
+    # Jobs with company info (not available in messages table)
+    print(f"   • Jobs with Company Name: N/A")
     
     # Total groups
     cursor.execute("SELECT COUNT(*) FROM groups")

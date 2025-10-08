@@ -165,11 +165,89 @@
             border-radius: 10px;
             margin-bottom: 15px;
             border-left: 4px solid #667eea;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         
         .job-card h4 {
             color: #111827;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        
+        .job-card .job-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #374151;
             margin-bottom: 10px;
+        }
+        
+        .job-card .job-description {
+            color: #6b7280;
+            line-height: 1.6;
+            margin-bottom: 15px;
+            white-space: pre-wrap;
+            font-size: 0.95em;
+            background: #ffffff;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .job-card .job-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .job-card .detail-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #ffffff;
+            border-radius: 6px;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .job-card .detail-item .icon {
+            font-size: 1.1em;
+        }
+        
+        .job-card .detail-item .label {
+            font-weight: 600;
+            color: #374151;
+            min-width: 80px;
+        }
+        
+        .job-card .detail-item .value {
+            color: #6b7280;
+            flex: 1;
+        }
+        
+        .job-card .apply-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .job-card .apply-link {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+        }
+        
+        .job-card .apply-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
         }
         
         .job-card .meta {
@@ -219,6 +297,167 @@
         .refresh-btn:hover {
             background: #5568d3;
             transform: scale(1.05);
+        }
+        
+        /* Pagination Styles */
+        .pagination-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .pagination-controls button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+        }
+        
+        .pagination-controls button:hover:not(:disabled) {
+            background: #5568d3;
+        }
+        
+        .pagination-controls button:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+        }
+        
+        .pagination-controls select {
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: white;
+            font-size: 0.9em;
+        }
+        
+        #pageInfo {
+            font-weight: 600;
+            color: #374151;
+        }
+        
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 0;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 1000px;
+            max-height: 80vh;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.3em;
+        }
+        
+        .close {
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: white;
+        }
+        
+        .close:hover {
+            opacity: 0.7;
+        }
+        
+        .modal-body {
+            padding: 20px;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        
+        .group-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-box {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            text-align: center;
+        }
+        
+        .stat-box .number {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-box .label {
+            color: #6b7280;
+            font-size: 0.9em;
+        }
+        
+        .group-messages {
+            margin-top: 20px;
+        }
+        
+        .group-message-item {
+            background: #f9fafb;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+        }
+        
+        .group-message-item .date {
+            font-size: 0.8em;
+            color: #6b7280;
+            margin-bottom: 5px;
+        }
+        
+        .group-message-item .text {
+            color: #374151;
+            line-height: 1.4;
+        }
+        
+        /* Clickable group names */
+        .clickable-group {
+            cursor: pointer;
+            color: #667eea;
+            text-decoration: underline;
+            transition: color 0.3s;
+        }
+        
+        .clickable-group:hover {
+            color: #5568d3;
         }
     </style>
 </head>
@@ -285,18 +524,53 @@
         
         <!-- Best Jobs -->
         <div class="section">
-            <h2>⭐ Best Verified Jobs (Top 50)</h2>
+            <h2>⭐ Best Quality Jobs (Score 60+)</h2>
             <div class="tabs">
                 <button class="tab active" onclick="showJobs('best')">Best Jobs</button>
                 <button class="tab" onclick="showJobs('tech')">Tech Jobs</button>
                 <button class="tab" onclick="showJobs('non_tech')">Non-Tech Jobs</button>
                 <button class="tab" onclick="showJobs('freelance')">Freelance Jobs</button>
             </div>
+            
+            <!-- Pagination Controls -->
+            <div class="pagination-controls">
+                <button id="prevBtn" onclick="changePage(-1)" disabled>← Previous</button>
+                <span id="pageInfo">Page 1 of 1</span>
+                <button id="nextBtn" onclick="changePage(1)" disabled>Next →</button>
+                <select id="pageSize" onchange="changePageSize()">
+                    <option value="10">10 per page</option>
+                    <option value="25" selected>25 per page</option>
+                    <option value="50">50 per page</option>
+                    <option value="100">100 per page</option>
+                </select>
+            </div>
+            
             <div id="jobsList" class="loading">Loading...</div>
+        </div>
+        
+        <!-- Group Details Modal -->
+        <div id="groupModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modalGroupName">Group Details</h3>
+                    <span class="close" onclick="closeGroupModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div id="groupStats" class="group-stats"></div>
+                    <div id="groupMessages" class="group-messages"></div>
+                </div>
+            </div>
         </div>
     </div>
     
     <script>
+        // Global variables for pagination
+        let currentPage = 1;
+        let pageSize = 25;
+        let totalPages = 1;
+        let currentJobType = 'best';
+        let allJobs = [];
+        
         // Load data on page load
         window.onload = function() {
             loadData();
@@ -394,30 +668,23 @@
             try {
                 const response = await fetch('/api/best_jobs');
                 const data = await response.json();
-                
-                let html = '';
-                
-                data.forEach(job => {
-                    html += `<div class="job-card">
-                        <h4>${job.company || 'Company Not Specified'}</h4>
-                        <p>${job.message.substring(0, 300)}...</p>
-                        <div class="meta">
-                            ${job.skills ? `<span>🔧 ${job.skills}</span>` : ''}
-                            ${job.salary ? `<span>💰 ${job.salary}</span>` : ''}
-                            ${job.work_mode ? `<span>🏠 ${job.work_mode}</span>` : ''}
-                            ${job.location ? `<span>📍 ${job.location}</span>` : ''}
-                            <span>📅 ${new Date(job.date).toLocaleDateString()}</span>
-                            <span>🔗 ${job.group}</span>
-                            <span class="score">⭐ ${job.score}%</span>
-                        </div>
-                    </div>`;
-                });
-                
-                if (data.length === 0) {
-                    html = '<p style="text-align:center; color:#888;">No jobs found yet. Run the fetcher!</p>';
-                }
-                
-                document.getElementById('jobsList').innerHTML = html;
+
+                // Normalize to common structure used by renderJobs()
+                allJobs = data.map(job => ({
+                    text: job.message,
+                    company: job.company || 'Company Not Specified',
+                    skills: job.skills || '',
+                    salary: job.salary || '',
+                    work_mode: job.work_mode || '',
+                    location: job.location || '',
+                    date: job.date,
+                    group: job.group,
+                    score: job.score || 0
+                }));
+
+                totalPages = Math.ceil(allJobs.length / pageSize) || 1;
+                updatePaginationControls();
+                renderJobs();
             } catch (error) {
                 console.error('Error loading jobs:', error);
             }
@@ -428,41 +695,197 @@
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             event.target.classList.add('active');
             
+            currentJobType = type;
+            currentPage = 1;
+            
             document.getElementById('jobsList').innerHTML = '<div class="loading">Loading...</div>';
             
             if (type === 'best') {
-                loadBestJobs();
+                await loadBestJobs();
                 return;
             }
             
             try {
                 const response = await fetch(`/api/messages/${type}`);
-                const data = await response.json();
+                allJobs = await response.json();
                 
-                let html = '';
+                totalPages = Math.ceil(allJobs.length / pageSize);
+                updatePaginationControls();
+                renderJobs();
                 
-                data.forEach(job => {
-                    html += `<div class="job-card">
-                        <h4>${job.company || 'Company Not Specified'}</h4>
-                        <p>${job.text.substring(0, 300)}...</p>
-                        <div class="meta">
-                            ${job.skills ? `<span>🔧 ${job.skills}</span>` : ''}
-                            ${job.salary ? `<span>💰 ${job.salary}</span>` : ''}
-                            ${job.work_mode ? `<span>🏠 ${job.work_mode}</span>` : ''}
-                            <span>📅 ${new Date(job.date).toLocaleDateString()}</span>
-                            <span>🔗 ${job.group}</span>
-                            ${job.score > 0 ? `<span class="score">⭐ ${job.score}%</span>` : ''}
-                        </div>
-                    </div>`;
-                });
-                
-                if (data.length === 0) {
-                    html = '<p style="text-align:center; color:#888;">No jobs in this category yet.</p>';
-                }
-                
-                document.getElementById('jobsList').innerHTML = html;
             } catch (error) {
                 console.error('Error loading messages:', error);
+            }
+        }
+        
+        function renderJobs() {
+            const startIndex = (currentPage - 1) * pageSize;
+            const endIndex = startIndex + pageSize;
+            const jobsToShow = allJobs.slice(startIndex, endIndex);
+            
+            let html = '';
+            
+            jobsToShow.forEach(job => {
+                // Extract job title from message
+                const jobTitle = job.text.split('\n')[0] || 'Job Position';
+                
+                // Extract apply link from message - detect any URL (http/https/www)
+                const urlMatch = job.text.match(/(https?:\/\/\S+|www\.\S+)/i);
+                const applyLink = urlMatch ? urlMatch[1].trim().replace(/[)>.,]+$/, '') : '';
+                
+                // Check if it's a real URL (not email)
+                const isRealUrl = applyLink && (
+                    applyLink.startsWith('http://') || 
+                    applyLink.startsWith('https://') || 
+                    applyLink.startsWith('www.')
+                );
+                
+                html += `<div class="job-card">
+                    <h4>${job.company || 'Company Not Specified'}</h4>
+                    <div class="job-title">${jobTitle}</div>
+                    <div class="job-description">${job.text}</div>
+                    
+                    <div class="job-details">
+                        ${job.skills ? `
+                            <div class="detail-item">
+                                <span class="icon">🔧</span>
+                                <span class="label">Technologies:</span>
+                                <span class="value">${job.skills}</span>
+                            </div>
+                        ` : ''}
+                        
+                        ${job.salary ? `
+                            <div class="detail-item">
+                                <span class="icon">💰</span>
+                                <span class="label">Salary:</span>
+                                <span class="value">${job.salary}</span>
+                            </div>
+                        ` : ''}
+                        
+                        ${job.work_mode ? `
+                            <div class="detail-item">
+                                <span class="icon">🏠</span>
+                                <span class="label">Work Mode:</span>
+                                <span class="value">${job.work_mode}</span>
+                            </div>
+                        ` : ''}
+                        
+                        <div class="detail-item">
+                            <span class="icon">📅</span>
+                            <span class="label">Posted:</span>
+                            <span class="value">${new Date(job.date).toLocaleDateString()}</span>
+                        </div>
+                        
+                        <div class="detail-item">
+                            <span class="icon">🔗</span>
+                            <span class="label">Group:</span>
+                            <span class="value clickable-group" onclick="showGroupDetails('${job.group}')">${job.group}</span>
+                        </div>
+                    </div>
+                    
+                    ${isRealUrl ? `
+                        <div class="apply-section">
+                            <a href="${applyLink.startsWith('http') ? applyLink : 'https://' + applyLink}" 
+                               target="_blank" class="apply-link">
+                                🔗 Apply Now
+                            </a>
+                        </div>
+                    ` : ''}
+                    
+                    <div class="meta">
+                        ${job.score > 0 ? `<span class="score">⭐ Quality Score: ${job.score}/100</span>` : ''}
+                    </div>
+                </div>`;
+            });
+            
+            if (jobsToShow.length === 0) {
+                html = '<p style="text-align:center; color:#888;">No jobs in this category yet.</p>';
+            }
+            
+            document.getElementById('jobsList').innerHTML = html;
+        }
+        
+        function changePage(direction) {
+            const newPage = currentPage + direction;
+            if (newPage >= 1 && newPage <= totalPages) {
+                currentPage = newPage;
+                updatePaginationControls();
+                renderJobs();
+            }
+        }
+        
+        function changePageSize() {
+            pageSize = parseInt(document.getElementById('pageSize').value);
+            currentPage = 1;
+            totalPages = Math.ceil(allJobs.length / pageSize);
+            updatePaginationControls();
+            renderJobs();
+        }
+        
+        function updatePaginationControls() {
+            document.getElementById('prevBtn').disabled = currentPage === 1;
+            document.getElementById('nextBtn').disabled = currentPage === totalPages;
+            document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+        }
+        
+        async function showGroupDetails(groupName) {
+            try {
+                const response = await fetch(`/api/group_details/${encodeURIComponent(groupName)}`);
+                const data = await response.json();
+                
+                document.getElementById('modalGroupName').textContent = groupName;
+                
+                // Show stats
+                const today = new Date().toISOString().split('T')[0];
+                const todayMessages = data.messages.filter(msg => msg.date.startsWith(today));
+                
+                document.getElementById('groupStats').innerHTML = `
+                    <div class="stat-box">
+                        <div class="number">${data.messages.length}</div>
+                        <div class="label">Total Messages</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number">${todayMessages.length}</div>
+                        <div class="label">Today's Messages</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number">${data.firstMessage}</div>
+                        <div class="label">First Message</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number">${data.lastMessage}</div>
+                        <div class="label">Last Message</div>
+                    </div>
+                `;
+                
+                // Show messages
+                let messagesHtml = '';
+                data.messages.forEach(msg => {
+                    messagesHtml += `
+                        <div class="group-message-item">
+                            <div class="date">${new Date(msg.date).toLocaleString()}</div>
+                            <div class="text">${msg.text}</div>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('groupMessages').innerHTML = messagesHtml;
+                document.getElementById('groupModal').style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error loading group details:', error);
+            }
+        }
+        
+        function closeGroupModal() {
+            document.getElementById('groupModal').style.display = 'none';
+        }
+        
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('groupModal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
             }
         }
     </script>
