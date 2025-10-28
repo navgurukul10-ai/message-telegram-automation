@@ -4,6 +4,8 @@ Database handler for storing messages and group data
 import sqlite3
 import os
 import sys
+import time
+import asyncio
 from datetime import datetime
 
 # Add project root to path
@@ -17,18 +19,49 @@ logger = get_logger('database')
 class DatabaseHandler:
     """SQLite database handler for job messages"""
     
+    _instance = None
+    _lock = None
+    _connection_pool = {}
+    
+    def __new__(cls):
+        """Singleton pattern to ensure only one instance"""
+        if cls._instance is None:
+            cls._instance = super(DatabaseHandler, cls).__new__(cls)
+            cls._lock = asyncio.Lock() if 'asyncio' in sys.modules else None
+        return cls._instance
+    
     def __init__(self):
+        # Only initialize once
+        if hasattr(self, '_initialized'):
+            return
+        
         # Create database directory
         os.makedirs(PATHS['database'], exist_ok=True)
         self.db_path = os.path.join(PATHS['database'], DATABASE['name'])
         self.connection = None
+        self._last_connection_time = {}
         self.create_tables()
+        self._initialized = True
     
     def connect(self):
-        """Establish database connection"""
+        """Establish database connection with optimized settings"""
         try:
-            self.connection = sqlite3.connect(self.db_path)
+            # Add timeout to prevent locking issues (30 seconds)
+            self.connection = sqlite3.connect(
+                self.db_path,
+                timeout=30.0,  # Wait up to 30 seconds for locks to clear
+                isolation_level=None  # Autocommit mode for better concurrency
+            )
             self.connection.row_factory = sqlite3.Row
+            
+            # Enable WAL mode for better concurrent access
+            # WAL allows multiple readers while one writer is active
+            cursor = self.connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")  # Faster writes
+            cursor.execute("PRAGMA busy_timeout=30000")  # 30 second busy timeout
+            cursor.execute("PRAGMA cache_size=-64000")  # 64MB cache
+            
             return self.connection
         except Exception as e:
             logger.error(f"Database connection error: {e}")
@@ -86,6 +119,11 @@ class DatabaseHandler:
         # Freelance Jobs Table
         cursor.execute(f'''
             CREATE TABLE IF NOT EXISTS freelance_jobs {job_table_schema}
+        ''')
+        
+        # Fresher Jobs Table
+        cursor.execute(f'''
+            CREATE TABLE IF NOT EXISTS fresher_jobs {job_table_schema}
         ''')
         
         # All Messages table (for backup/reference)
@@ -155,39 +193,78 @@ class DatabaseHandler:
     
     def insert_message(self, message_data):
         """Insert a new message into appropriate table(s)"""
-        conn = self.connect()
-        cursor = conn.cursor()
+        max_retries = 5
+        retry_delay = 2
         
-        try:
-            # Insert into main messages table
-            cursor.execute('''
-                INSERT OR IGNORE INTO messages 
-                (message_id, group_name, group_link, sender, date, message_text, 
-                 job_type, keywords_found, account_used)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                message_data['message_id'],
-                message_data['group_name'],
-                message_data['group_link'],
-                message_data['sender'],
-                message_data['date'],
-                message_data['message_text'],
-                message_data['job_type'],
-                message_data['keywords_found'],
-                message_data['account_used']
-            ))
-            
-            # Insert into category-specific table with enhanced fields
-            self._insert_into_category_table(cursor, message_data)
-            
-            conn.commit()
-            logger.debug(f"Message {message_data['message_id']} inserted successfully")
-            return True
-        except Exception as e:
-            logger.error(f"Error inserting message: {e}")
-            return False
-        finally:
-            conn.close()
+        for attempt in range(max_retries):
+            conn = None
+            try:
+                conn = self.connect()
+                cursor = conn.cursor()
+                
+                # Set busy timeout for this connection
+                cursor.execute("PRAGMA busy_timeout=60000")  # 60 seconds
+                
+                # Insert into main messages table
+                cursor.execute('''
+                    INSERT OR IGNORE INTO messages 
+                    (message_id, group_name, group_link, sender, date, message_text, 
+                     job_type, keywords_found, account_used)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    message_data['message_id'],
+                    message_data['group_name'],
+                    message_data['group_link'],
+                    message_data['sender'],
+                    message_data['date'],
+                    message_data['message_text'],
+                    message_data['job_type'],
+                    message_data['keywords_found'],
+                    message_data['account_used']
+                ))
+                
+                # Insert into category-specific table with enhanced fields
+                self._insert_into_category_table(cursor, message_data)
+                
+                conn.commit()
+                logger.debug(f"Message {message_data['message_id']} inserted successfully")
+                return True
+                
+            except sqlite3.OperationalError as e:
+                if 'database is locked' in str(e) and attempt < max_retries - 1:
+                    logger.warning(f"Database locked, retry {attempt + 1}/{max_retries} in {retry_delay}s...")
+                    if conn:
+                        try:
+                            conn.close()
+                        except:
+                            pass
+                    time.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 2, 10)  # Exponential backoff, max 10s
+                    continue
+                else:
+                    logger.error(f"Error inserting message after {max_retries} attempts: {e}")
+                    if conn:
+                        try:
+                            conn.close()
+                        except:
+                            pass
+                    return False
+            except Exception as e:
+                logger.error(f"Error inserting message: {e}")
+                if conn:
+                    try:
+                        conn.close()
+                    except:
+                        pass
+                return False
+            finally:
+                if conn:
+                    try:
+                        conn.close()
+                    except:
+                        pass
+        
+        return False
     
     def _insert_into_category_table(self, cursor, message_data):
         """Insert message into appropriate category table"""
@@ -201,6 +278,8 @@ class DatabaseHandler:
             table_name = 'freelance_jobs'
         elif 'non_tech' in job_type:
             table_name = 'non_tech_jobs'
+        elif 'fresher' in job_type:
+            table_name = 'fresher_jobs'
         else:
             return  # Unknown category
         

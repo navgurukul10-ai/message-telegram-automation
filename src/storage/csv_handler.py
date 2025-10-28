@@ -26,6 +26,7 @@ class CSVHandler:
         self.tech_jobs_file = os.path.join(PATHS['csv'], 'tech_jobs.csv')
         self.non_tech_jobs_file = os.path.join(PATHS['csv'], 'non_tech_jobs.csv')
         self.freelance_jobs_file = os.path.join(PATHS['csv'], 'freelance_jobs.csv')
+        self.fresher_jobs_file = os.path.join(PATHS['csv'], 'fresher_jobs.csv')
         self.groups_file = os.path.join(PATHS['csv'], 'joined_groups.csv')
         
         # Create headers if files don't exist
@@ -66,6 +67,9 @@ class CSVHandler:
             
             if 'freelance' in job_type:
                 self._append_to_csv(self.freelance_jobs_file, message_data, CSV_COLUMNS['messages'])
+            
+            if 'fresher' in job_type:
+                self._append_to_csv(self.fresher_jobs_file, message_data, CSV_COLUMNS['messages'])
             
             logger.debug(f"Message written to CSV: {message_data['message_id']}")
             return True

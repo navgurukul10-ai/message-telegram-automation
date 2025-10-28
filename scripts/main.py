@@ -3,10 +3,16 @@ Main entry point for Telegram Job Fetcher
 """
 import asyncio
 import sys
+import os
 from datetime import datetime
-from telegram_client import TelegramJobFetcher
-from utils.logger import get_logger
-from config import RUNTIME
+
+# Add project root to Python path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
+from src.core.telegram_client import TelegramJobFetcher
+from src.utils.logger import get_logger
+from config.settings import RUNTIME
 
 logger = get_logger('main')
 

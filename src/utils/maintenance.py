@@ -148,12 +148,51 @@ def _sync_category_tables(conn):
 
 
 def backup_csv_file(path):
-    """Create timestamped backup of CSV file"""
+    """Create timestamped backup of CSV file and cleanup old backups"""
     if os.path.exists(path):
         ts = int(datetime.now().timestamp())
         backup_path = f"{path}.backup.{ts}"
         os.replace(path, backup_path)
         logger.debug(f"Created backup: {backup_path}")
+        
+        # Auto-cleanup: Delete backups older than 3 days
+        cleanup_old_backups(path, days=3)
+
+
+def cleanup_old_backups(original_path, days=3):
+    """Delete backup files older than specified days"""
+    import glob
+    import time
+    
+    # Find all backup files for this CSV
+    backup_pattern = f"{original_path}.backup.*"
+    backup_files = glob.glob(backup_pattern)
+    
+    if not backup_files:
+        return
+    
+    # Current time
+    now = time.time()
+    cutoff = now - (days * 24 * 60 * 60)  # days to seconds
+    
+    deleted_count = 0
+    for backup_file in backup_files:
+        try:
+            # Extract timestamp from filename
+            parts = backup_file.split('.backup.')
+            if len(parts) == 2:
+                backup_ts = int(parts[1])
+                
+                # Delete if older than cutoff
+                if backup_ts < cutoff:
+                    os.remove(backup_file)
+                    deleted_count += 1
+                    logger.debug(f"Deleted old backup: {backup_file}")
+        except (ValueError, OSError) as e:
+            logger.debug(f"Error processing backup {backup_file}: {e}")
+    
+    if deleted_count > 0:
+        logger.info(f"Cleaned up {deleted_count} old backup(s) for {os.path.basename(original_path)}")
 
 
 def export_query_to_csv(conn, query, out_path):
@@ -241,7 +280,19 @@ def sync_csv_with_database(db_path=None):
         results['freelance_jobs'] = count_free
         logger.info(f"✅ freelance_jobs.csv: {count_free} rows")
         
-        # 5) joined_groups.csv
+        # 5) fresher_jobs.csv
+        fresher_q = """
+            SELECT message_id, group_name, group_link, sender, date, message_text,
+                   keywords_found, account_used, job_type
+            FROM messages
+            WHERE job_type LIKE '%fresher%'
+            ORDER BY date DESC
+        """
+        count_fresher = export_query_to_csv(conn, fresher_q, os.path.join(csv_dir, "fresher_jobs.csv"))
+        results['fresher_jobs'] = count_fresher
+        logger.info(f"✅ fresher_jobs.csv: {count_fresher} rows")
+        
+        # 6) joined_groups.csv
         groups_q = """
             SELECT group_name, group_link, join_date
             FROM groups

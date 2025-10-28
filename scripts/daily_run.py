@@ -1,6 +1,6 @@
 """
-Daily Run Script - Run for one day at a time
-Modified version that runs for just today instead of 30 days
+Daily Run Script - Run continuously with maintenance
+Runs for 30 days continuously, processing all groups
 Includes automatic maintenance: job type fixing and CSV sync
 """
 import asyncio
@@ -18,7 +18,7 @@ from src.utils.maintenance import perform_maintenance
 logger = get_logger('daily_run')
 
 async def daily_main():
-    """Run fetcher for today only with automatic maintenance"""
+    """Run fetcher continuously with automatic maintenance"""
     try:
         logger.info("="*60)
         logger.info("Telegram Job Fetcher - DAILY MODE")
@@ -48,20 +48,20 @@ async def daily_main():
             logger.error("No clients initialized. Exiting...")
             return
         
-        logger.info(f"Running for TODAY only (check every hour)")
-        logger.info(f"Working hours: 10 AM - 8 PM")
-        logger.info(f"Groups limit: 8 groups today")
-        logger.info(f"You can run this script daily for continuous operation")
+        logger.info(f"Running CONTINUOUSLY for 30 days")
+        logger.info(f"Working hours: 9 AM - 11 PM")
+        logger.info(f"Will process all 857 groups")
+        logger.info(f"Press Ctrl+C to stop anytime")
         
-        # Step 3: Run for just 1 day
-        await fetcher.run_continuous(duration_days=1)
+        # Step 3: Run continuously for 30 days
+        await fetcher.run_continuous(duration_days=30)
         
         # Step 4: Final maintenance after fetching
         logger.info("Performing final CSV sync...")
         perform_maintenance()
         
-        logger.info("Today's fetching completed!")
-        logger.info("Run again tomorrow to continue!")
+        logger.info("Continuous run completed!")
+        logger.info("All groups processed for 30 days!")
         
     except KeyboardInterrupt:
         logger.info("Interrupted by user. Shutting down...")

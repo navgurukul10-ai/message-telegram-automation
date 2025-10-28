@@ -20,6 +20,8 @@ class MessageClassifier:
         self.tech_keywords = [kw.lower() for kw in JOB_KEYWORDS['tech']]
         self.non_tech_keywords = [kw.lower() for kw in JOB_KEYWORDS['non_tech']]
         self.freelance_keywords = [kw.lower() for kw in JOB_KEYWORDS['freelance']]
+        # Optional category for entry-level roles
+        self.fresher_keywords = [kw.lower() for kw in JOB_KEYWORDS.get('fresher', [])]
     
     def classify(self, message_text):
         """
@@ -35,8 +37,14 @@ class MessageClassifier:
         text_lower = message_text.lower()
         
         # Check if it's a job posting
-        job_indicators = ['hiring', 'job', 'position', 'vacancy', 'opening', 
-                         'opportunity', 'recruit', 'career', 'apply', 'join our team']
+        job_indicators = [
+            'hiring', 'job', 'position', 'vacancy', 'opening', 
+            'opportunity', 'recruit', 'career', 'apply', 'join our team',
+            'developer', 'engineer', 'analyst', 'manager', 'designer',
+            'architect', 'consultant', 'specialist', 'lead', 'senior',
+            'junior', 'intern', 'trainee', 'looking for', 'we are looking',
+            'join us', 'join our', 'work with us', 'roles available'
+        ]
         
         has_job_indicator = any(indicator in text_lower for indicator in job_indicators)
         
@@ -47,28 +55,31 @@ class MessageClassifier:
         tech_matches = self._find_keywords(text_lower, self.tech_keywords)
         non_tech_matches = self._find_keywords(text_lower, self.non_tech_keywords)
         freelance_matches = self._find_keywords(text_lower, self.freelance_keywords)
+        fresher_matches = self._find_keywords(text_lower, self.fresher_keywords)
         
-        # Determine job type (priority: freelance > tech > non-tech)
+        # Determine job type tokens (can be multi-tag):
+        # priority for presence only; composition supported like "freelance_tech_fresher"
+        tokens = []
         all_matches = []
-        job_type = None
         
         if freelance_matches:
-            job_type = 'freelance'
+            tokens.append('freelance')
             all_matches.extend(freelance_matches)
         
         if tech_matches:
-            if job_type == 'freelance':
-                job_type = 'freelance_tech'
-            else:
-                job_type = 'tech'
+            tokens.append('tech')
             all_matches.extend(tech_matches)
         
-        if non_tech_matches and not tech_matches:
-            if job_type == 'freelance':
-                job_type = 'freelance_non_tech'
-            else:
-                job_type = 'non_tech'
+        # Only add non_tech if tech not present to avoid conflicts
+        if non_tech_matches and 'tech' not in tokens:
+            tokens.append('non_tech')
             all_matches.extend(non_tech_matches)
+        
+        if fresher_matches:
+            tokens.append('fresher')
+            all_matches.extend(fresher_matches)
+
+        job_type = '_'.join(tokens) if tokens else None
         
         # Remove duplicates
         all_matches = list(set(all_matches))

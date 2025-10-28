@@ -5,15 +5,24 @@ import asyncio
 import random
 import json
 import os
+import sqlite3
 from datetime import datetime, timedelta
+
+# IMPORTANT: Patch Telethon sessions before importing TelegramClient
+from src.utils.telethon_session_fix import patch_telethon_sessions
+patch_telethon_sessions()
+
 from telethon import TelegramClient, events
 from telethon.errors import (
     FloodWaitError, ChannelPrivateError, UserBannedInChannelError,
-    ChatWriteForbiddenError, ChannelInvalidError
+    ChatWriteForbiddenError, ChannelInvalidError, AuthKeyError,
+    TimeoutError as TelethonTimeoutError, ServerError, RpcCallFailError
 )
 from telethon.tl.types import Channel, Chat
 from telethon.tl.functions.channels import JoinChannelRequest
 from telethon.tl.functions.messages import ImportChatInviteRequest
+import signal
+import sys
 
 from config.settings import ACCOUNTS, RATE_LIMITS, MESSAGE_YEAR_FILTER, PATHS
 from src.utils.logger import get_logger
@@ -35,15 +44,28 @@ class TelegramJobFetcher:
         self.classifier = MessageClassifier()
         self.csv_handler = CSVHandler()
         self.job_verifier = JobVerifier()
+        self.is_shutting_down = False
+        self._running_tasks = []
+        self._db_write_lock = asyncio.Lock()
+        self._last_db_write = 0
         
         # Create sessions directory
         os.makedirs(PATHS['sessions'], exist_ok=True)
         os.makedirs(PATHS['json'], exist_ok=True)
         
+        # Setup signal handlers for graceful shutdown
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
+        
         # Load tracking data
         self.processed_messages = set()
         self.joined_groups = {}
         self._load_tracking_data()
+    
+    def _signal_handler(self, signum, frame):
+        """Handle shutdown signals gracefully"""
+        logger.info(f"Received signal {signum}. Initiating graceful shutdown...")
+        self.is_shutting_down = True
     
     def _load_tracking_data(self):
         """Load processed messages and joined groups"""
@@ -61,32 +83,41 @@ class TelegramJobFetcher:
         logger.info(f"Loaded {len(self.joined_groups)} joined groups")
     
     async def initialize_clients(self):
-        """Initialize Telegram clients for all accounts"""
+        """Initialize Telegram clients for all accounts with robust error handling"""
         logger.info("Initializing Telegram clients...")
         
-        for account in self.accounts:
-            max_retries = 3
+        for idx, account in enumerate(self.accounts):
+            # Add delay between client initializations to prevent session file conflicts
+            if idx > 0:
+                delay = 3  # 3 seconds between each client
+                logger.info(f"Waiting {delay}s before initializing next client...")
+                await asyncio.sleep(delay)
+            max_retries = 5  # Increased retries
             retry_delay = 10
+            client = None
             
             for attempt in range(max_retries):
                 try:
                     session_path = os.path.join(PATHS['sessions'], account['session_name'])
                     
-                    # Create client with longer timeout settings
+                    # Create client with optimized timeout settings
                     client = TelegramClient(
                         session_path,
                         account['api_id'],
                         account['api_hash'],
                         connection_retries=5,
-                        retry_delay=3,
-                        timeout=30,  # Increase timeout to 30 seconds
-                        request_retries=3
+                        retry_delay=5,
+                        timeout=60,  # Increased timeout to 60 seconds
+                        request_retries=5,
+                        auto_reconnect=True,  # Enable auto-reconnect
+                        flood_sleep_threshold=0  # Handle flood waits manually
                     )
                     
                     # Try to connect with timeout handling
                     logger.info(f"Connecting {account['name']} (attempt {attempt + 1}/{max_retries})...")
-                    await asyncio.wait_for(client.connect(), timeout=60)
+                    await asyncio.wait_for(client.connect(), timeout=90)
                     
+                    # Verify connection is healthy
                     if not await client.is_user_authorized():
                         logger.warning(f"Account {account['name']} needs authorization")
                         await client.send_code_request(account['phone'])
@@ -98,46 +129,75 @@ class TelegramJobFetcher:
                         
                         logger.info(f"Account {account['name']} authorized successfully")
                     else:
-                        logger.info(f"Account {account['name']} already authorized")
+                        # Test connection with a simple API call
+                        me = await asyncio.wait_for(client.get_me(), timeout=30)
+                        logger.info(f"Account {account['name']} already authorized ({me.first_name})")
                     
                     self.clients.append({
                         'client': client,
                         'account': account,
                         'last_action': None,
                         'groups_joined_today': 0,
-                        'messages_fetched_today': 0
+                        'messages_fetched_today': 0,
+                        'reconnect_attempts': 0
                     })
                     
                     # Success! Break the retry loop
+                    logger.info(f"✅ Successfully initialized {account['name']}")
                     break
                 
                 except asyncio.TimeoutError:
-                    logger.warning(f"Timeout connecting {account['name']} (attempt {attempt + 1}/{max_retries})")
+                    logger.warning(f"⏱️  Timeout connecting {account['name']} (attempt {attempt + 1}/{max_retries})")
                     if attempt < max_retries - 1:
                         logger.info(f"Retrying in {retry_delay} seconds...")
                         await asyncio.sleep(retry_delay)
-                        retry_delay *= 2  # Exponential backoff
+                        retry_delay = min(retry_delay * 2, 120)  # Cap at 2 minutes
                     else:
-                        logger.error(f"Failed to connect {account['name']} after {max_retries} attempts")
+                        logger.error(f"❌ Failed to connect {account['name']} after {max_retries} attempts")
+                    
+                    # Cleanup failed client
+                    if client:
                         try:
-                            await client.disconnect()
+                            await asyncio.wait_for(client.disconnect(), timeout=10)
                         except:
                             pass
                 
+                except (ConnectionError, OSError, ServerError, RpcCallFailError) as e:
+                    logger.warning(f"🔌 Network error for {account['name']}: {e}")
+                    if attempt < max_retries - 1:
+                        logger.info(f"Connection issue detected. Retrying in {retry_delay} seconds...")
+                        await asyncio.sleep(retry_delay)
+                        retry_delay = min(retry_delay * 2, 120)
+                    else:
+                        logger.error(f"❌ Network issues persist for {account['name']}. Skipping.")
+                    
+                    if client:
+                        try:
+                            await asyncio.wait_for(client.disconnect(), timeout=10)
+                        except:
+                            pass
+                
+                except AuthKeyError as e:
+                    logger.error(f"🔑 Auth key error for {account['name']}: {e}")
+                    logger.error("Session file may be corrupted. You may need to re-authorize this account.")
+                    break  # Don't retry auth key errors
+                
                 except Exception as e:
-                    logger.error(f"Failed to initialize {account['name']}: {e}")
+                    logger.error(f"❌ Failed to initialize {account['name']}: {type(e).__name__}: {e}")
                     if attempt < max_retries - 1:
                         logger.info(f"Retrying in {retry_delay} seconds...")
                         await asyncio.sleep(retry_delay)
-                        retry_delay *= 2
+                        retry_delay = min(retry_delay * 2, 120)
                     else:
                         logger.error(f"Giving up on {account['name']} after {max_retries} attempts")
-                    try:
-                        await client.disconnect()
-                    except:
-                        pass
+                    
+                    if client:
+                        try:
+                            await asyncio.wait_for(client.disconnect(), timeout=10)
+                        except:
+                            pass
         
-        logger.info(f"Initialized {len(self.clients)} clients successfully")
+        logger.info(f"✅ Initialized {len(self.clients)} clients successfully out of {len(self.accounts)} accounts")
     
     def _get_next_client(self):
         """Get next available client with rotation"""
@@ -166,6 +226,20 @@ class TelegramJobFetcher:
         delay = random.uniform(delay_range[0], delay_range[1])
         logger.debug(f"Waiting {delay:.2f} seconds...")
         await asyncio.sleep(delay)
+    
+    async def _safe_db_write(self, write_func, *args, **kwargs):
+        """Safely write to database with locking to prevent concurrent access"""
+        async with self._db_write_lock:
+            # Add small delay between writes to prevent lock contention
+            current_time = asyncio.get_event_loop().time()
+            time_since_last_write = current_time - self._last_db_write
+            if time_since_last_write < 0.1:  # 100ms minimum between writes
+                await asyncio.sleep(0.1 - time_since_last_write)
+            
+            # Perform the write
+            result = write_func(*args, **kwargs)
+            self._last_db_write = asyncio.get_event_loop().time()
+            return result
     
     def _is_working_hours(self):
         """Check if current time is within working hours"""
@@ -227,13 +301,16 @@ class TelegramJobFetcher:
                 'join_date': datetime.now().isoformat()
             }
             
-            # Save to database
-            self.db.insert_group({
-                'group_name': group_name,
-                'group_link': group_link,
-                'join_date': datetime.now(),
-                'account_used': account['name']
-            })
+            # Save to database with safe locking
+            await self._safe_db_write(
+                self.db.insert_group,
+                {
+                    'group_name': group_name,
+                    'group_link': group_link,
+                    'join_date': datetime.now(),
+                    'account_used': account['name']
+                }
+            )
             
             # Save to CSV
             self.csv_handler.write_group({
@@ -245,8 +322,12 @@ class TelegramJobFetcher:
                 'last_message_date': ''
             })
             
-            # Update account usage
-            self.db.update_account_usage(account['name'], groups_joined=1)
+            # Update account usage with safe locking
+            await self._safe_db_write(
+                self.db.update_account_usage,
+                account['name'],
+                groups_joined=1
+            )
             
             logger.info(f"Successfully joined group: {group_name} using {account['name']}")
             return True
@@ -269,119 +350,183 @@ class TelegramJobFetcher:
             return False
     
     async def fetch_messages(self, group_link, client_info, limit=None):
-        """Fetch messages from a group"""
-        try:
-            # Use safe limit from config
-            if limit is None:
-                limit = RATE_LIMITS.get('daily_message_limit', 75)
-            
-            client = client_info['client']
-            account = client_info['account']
-            
-            # Get entity with timeout
-            if 'joinchat' in group_link or '+' in group_link:
-                entity = await asyncio.wait_for(
-                    client.get_entity(group_link),
-                    timeout=60
-                )
-            else:
-                username = group_link.split('/')[-1]
-                entity = await asyncio.wait_for(
-                    client.get_entity(username),
-                    timeout=60
-                )
-            
-            group_name = entity.title if hasattr(entity, 'title') else username
-            
-            # Fetch messages
-            messages = []
-            new_messages_count = 0
-            
-            async for message in client.iter_messages(entity, limit=limit):
-                # Add small delay between fetches
-                await self._safe_delay(RATE_LIMITS['message_fetch_delay'])
-                
-                # Skip if no text
-                if not message.text:
-                    continue
-                
-                # Check if message is from current year
-                if message.date.year != MESSAGE_YEAR_FILTER:
-                    continue
-                
-                # Create unique message ID
-                message_id = f"{entity.id}_{message.id}"
-                
-                # Skip if already processed
-                if message_id in self.processed_messages:
-                    continue
-                
-                # Classify message
-                job_type, keywords = self.classifier.classify(message.text)
-                
-                # Skip if not a job message
-                if not job_type:
-                    continue
-                
-                # Verify job and extract company info
-                verification_result = self.job_verifier.verify_and_extract(message.text)
-                
-                # Prepare message data with enhanced fields
-                message_data = {
-                    'message_id': message_id,
-                    'group_name': group_name,
-                    'group_link': group_link,
-                    'sender': message.sender_id if message.sender_id else 'Unknown',
-                    'date': message.date.isoformat(),
-                    'message_text': message.text,
-                    'job_type': job_type,
-                    'keywords_found': ','.join(keywords),
-                    'account_used': account['name']
-                }
-                
-                # Add verification and company info if available
-                if verification_result:
-                    message_data.update(verification_result)
-                    logger.debug(f"Job verified: {verification_result['is_verified']}, "
-                               f"Score: {verification_result['verification_score']:.2f}%, "
-                               f"Company: {verification_result['company_name']}")
-                
-                # Save to database (will go to category-specific table too)
-                self.db.insert_message(message_data)
-                
-                # Save to CSV
-                self.csv_handler.write_message(message_data)
-                
-                # Update tracking
-                self.processed_messages.add(message_id)
-                messages.append(message_data)
-                new_messages_count += 1
-                
-                logger.info(f"Fetched job message: {job_type} from {group_name}")
-            
-            # Update account usage
-            if new_messages_count > 0:
-                self.db.update_account_usage(account['name'], messages_fetched=new_messages_count)
-            
-            logger.info(f"Fetched {new_messages_count} new job messages from {group_name}")
-            return messages
+        """Fetch messages from a group with robust error handling"""
+        max_retries = 3
         
-        except asyncio.TimeoutError:
-            logger.error(f"Timeout fetching messages from {group_link}")
-            return []
+        for retry in range(max_retries):
+            try:
+                # Check if shutting down
+                if self.is_shutting_down:
+                    logger.info("Shutdown requested, skipping message fetch")
+                    return []
+                
+                # Use safe limit from config
+                if limit is None:
+                    limit = RATE_LIMITS.get('daily_message_limit', 75)
+                
+                client = client_info['client']
+                account = client_info['account']
+                
+                # Get entity with timeout
+                if 'joinchat' in group_link or '+' in group_link:
+                    entity = await asyncio.wait_for(
+                        client.get_entity(group_link),
+                        timeout=60
+                    )
+                else:
+                    username = group_link.split('/')[-1]
+                    entity = await asyncio.wait_for(
+                        client.get_entity(username),
+                        timeout=60
+                    )
+                
+                group_name = entity.title if hasattr(entity, 'title') else username
+                
+                # Fetch messages
+                messages = []
+                new_messages_count = 0
+                messages_checked = 0
+                consecutive_old = 0  # Track consecutive old/processed messages
+                
+                async for message in client.iter_messages(entity, limit=limit):
+                    # Check shutdown flag
+                    if self.is_shutting_down:
+                        logger.info("Shutdown requested during message fetch")
+                        break
+                    
+                    messages_checked += 1
+                    
+                    # Add small delay between fetches (but only if we're still finding new messages)
+                    if messages_checked > 1:  # Skip delay for first message
+                        await self._safe_delay(RATE_LIMITS['message_fetch_delay'])
+                    
+                    # Skip if no text
+                    if not message.text:
+                        continue
+                    
+                    # Check if message is from current year
+                    if message.date.year != MESSAGE_YEAR_FILTER:
+                        continue
+                    
+                    # Create unique message ID
+                    message_id = f"{entity.id}_{message.id}"
+                    
+                    # Skip if already processed
+                    if message_id in self.processed_messages:
+                        consecutive_old += 1
+                        # If we've seen 10 consecutive old messages, likely all are old - skip rest
+                        if consecutive_old >= 10:
+                            logger.debug(f"Found 10 consecutive old messages, skipping rest for {group_name}")
+                            break
+                        continue
+                    
+                    # Reset counter when we find a new message
+                    consecutive_old = 0
+                    
+                    # Classify message
+                    job_type, keywords = self.classifier.classify(message.text)
+                    
+                    # Skip if not a job message
+                    if not job_type:
+                        continue
+                    
+                    # Verify job and extract company info
+                    verification_result = self.job_verifier.verify_and_extract(message.text)
+                    
+                    # Prepare message data with enhanced fields
+                    message_data = {
+                        'message_id': message_id,
+                        'group_name': group_name,
+                        'group_link': group_link,
+                        'sender': message.sender_id if message.sender_id else 'Unknown',
+                        'date': message.date.isoformat(),
+                        'message_text': message.text,
+                        'job_type': job_type,
+                        'keywords_found': ','.join(keywords),
+                        'account_used': account['name']
+                    }
+                    
+                    # Add verification and company info if available
+                    if verification_result:
+                        message_data.update(verification_result)
+                        logger.debug(f"Job verified: {verification_result['is_verified']}, "
+                                   f"Score: {verification_result['verification_score']:.2f}%, "
+                                   f"Company: {verification_result['company_name']}")
+                    
+                    # Save to database (will go to category-specific table too) with safe locking
+                    await self._safe_db_write(self.db.insert_message, message_data)
+                    
+                    # Save to CSV
+                    self.csv_handler.write_message(message_data)
+                    
+                    # Update tracking
+                    self.processed_messages.add(message_id)
+                    messages.append(message_data)
+                    new_messages_count += 1
+                    
+                    logger.info(f"Fetched job message: {job_type} from {group_name}")
+                
+                # Update account usage with safe locking
+                if new_messages_count > 0:
+                    await self._safe_db_write(
+                        self.db.update_account_usage,
+                        account['name'],
+                        messages_fetched=new_messages_count
+                    )
+                
+                # Log with more detail
+                if new_messages_count > 0:
+                    logger.info(f"✅ Fetched {new_messages_count} new job messages from {group_name} (checked {messages_checked} total)")
+                else:
+                    logger.debug(f"⏭️  No new messages in {group_name} (checked {messages_checked})")
+                
+                return messages
+            
+            except asyncio.TimeoutError:
+                logger.error(f"⏱️  Timeout fetching messages from {group_link} (attempt {retry + 1}/{max_retries})")
+                if retry < max_retries - 1:
+                    await asyncio.sleep(10)
+                    continue
+                return []
+            
+            except FloodWaitError as e:
+                logger.warning(f"⚠️  FloodWait error: need to wait {e.seconds} seconds")
+                await asyncio.sleep(e.seconds)
+                return []
+            
+            except (ConnectionError, OSError, ServerError, RpcCallFailError) as e:
+                logger.warning(f"🔌 Network error fetching from {group_link}: {e} (attempt {retry + 1}/{max_retries})")
+                if retry < max_retries - 1:
+                    logger.info("Network issue detected, retrying in 15 seconds...")
+                    await asyncio.sleep(15)
+                    continue
+                return []
+            
+            except sqlite3.OperationalError as e:
+                if 'database is locked' in str(e):
+                    logger.warning(f"💾 Database locked, waiting... (attempt {retry + 1}/{max_retries})")
+                    await asyncio.sleep(5)
+                    if retry < max_retries - 1:
+                        continue
+                logger.error(f"Database error: {e}")
+                return []
+            
+            except Exception as e:
+                logger.error(f"❌ Error fetching messages from {group_link}: {type(e).__name__}: {e}")
+                if retry < max_retries - 1 and not self.is_shutting_down:
+                    await asyncio.sleep(10)
+                    continue
+                return []
         
-        except FloodWaitError as e:
-            logger.warning(f"FloodWait error: need to wait {e.seconds} seconds")
-            await asyncio.sleep(e.seconds)
-            return []
-        
-        except Exception as e:
-            logger.error(f"Error fetching messages from {group_link}: {e}")
-            return []
+        return []
     
     async def process_groups(self, groups_data):
-        """Process list of groups"""
+        """Process list of groups with optimized speed"""
         logger.info(f"Starting to process {len(groups_data)} groups...")
+        
+        start_time = datetime.now()
+        groups_with_messages = 0
+        total_messages = 0
         
         for i, group in enumerate(groups_data):
             try:
@@ -411,16 +556,39 @@ class TelegramJobFetcher:
                 if group_link not in self.joined_groups:
                     success = await self.join_group(group_link, client_info)
                     if not success:
+                        logger.info(f"⏭️  Skipped joining {group.get('name', 'Unknown')} [{i+1}/{len(groups_data)}]")
                         continue
                 
                 # Fetch messages
                 messages = await self.fetch_messages(group_link, client_info)
                 
-                logger.info(f"Processed {i+1}/{len(groups_data)} groups")
+                if messages:
+                    groups_with_messages += 1
+                    total_messages += len(messages)
+                
+                # Progress with statistics
+                elapsed = (datetime.now() - start_time).total_seconds()
+                avg_time_per_group = elapsed / (i + 1)
+                remaining_groups = len(groups_data) - (i + 1)
+                eta_seconds = avg_time_per_group * remaining_groups
+                eta_minutes = int(eta_seconds / 60)
+                
+                logger.info(f"📊 Progress: {i+1}/{len(groups_data)} | "
+                          f"Messages: {total_messages} from {groups_with_messages} groups | "
+                          f"ETA: {eta_minutes}min")
+                
+                # Reduced delay between groups (only if request_delay is set)
+                request_delay = RATE_LIMITS.get('request_delay', (2, 5))
+                await self._safe_delay(request_delay)
                 
             except Exception as e:
                 logger.error(f"Error processing group {group.get('name', 'Unknown')}: {e}")
                 continue
+        
+        # Final summary
+        total_time = (datetime.now() - start_time).total_seconds() / 60
+        logger.info(f"✅ Completed! Processed {len(groups_data)} groups in {total_time:.1f} minutes. "
+                   f"Found {total_messages} messages from {groups_with_messages} groups.")
     
     async def run_continuous(self, duration_days=30):
         """Run the fetcher continuously for specified days"""
@@ -455,8 +623,45 @@ class TelegramJobFetcher:
         logger.info("Continuous run completed!")
     
     async def close_clients(self):
-        """Close all client connections"""
+        """Close all client connections gracefully"""
+        logger.info("Closing all client connections...")
+        
         for client_info in self.clients:
-            await client_info['client'].disconnect()
-        logger.info("All clients disconnected")
+            try:
+                client = client_info['client']
+                account_name = client_info['account']['name']
+                
+                if client.is_connected():
+                    logger.info(f"Disconnecting {account_name}...")
+                    
+                    # Cancel any pending tasks gracefully
+                    try:
+                        # Give client time to finish pending operations
+                        await asyncio.wait_for(client.disconnect(), timeout=15)
+                        logger.info(f"✅ {account_name} disconnected cleanly")
+                    except asyncio.TimeoutError:
+                        logger.warning(f"⏱️  Timeout disconnecting {account_name}, forcing...")
+                        # Force disconnect if timeout
+                        try:
+                            await asyncio.wait_for(client.disconnect(), timeout=5)
+                        except:
+                            pass
+                else:
+                    logger.debug(f"{account_name} already disconnected")
+                    
+            except Exception as e:
+                logger.error(f"Error disconnecting {client_info['account']['name']}: {e}")
+                # Continue with other clients
+                continue
+        
+        # Cancel any remaining background tasks
+        for task in self._running_tasks:
+            if not task.done():
+                task.cancel()
+                try:
+                    await asyncio.wait_for(task, timeout=5)
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    pass
+        
+        logger.info("✅ All clients disconnected successfully")
 

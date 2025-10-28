@@ -24,7 +24,7 @@ RATE_LIMITS = {
     'max_groups_per_hour': 1,
     'daily_message_limit': 75,
     'request_delay': (5, 15),
-    'working_hours': (10, 20),
+    'working_hours': (9, 23),
 }
 
 # Filter Settings
@@ -91,6 +91,13 @@ JOB_KEYWORDS = {
         'freelance', 'freelancer', 'gig', 'contract', 'part-time', 'part time',
         'remote work', 'work from home', 'wfh', 'upwork', 'fiverr', 'toptal',
         'consultant', 'hourly', 'project basis', 'flexible hours', 'independent'
+    ],
+    'fresher': [
+        'fresher', 'fresh graduate', 'entry level', 'junior', 'trainee', 'intern',
+        'internship', 'graduate trainee', 'fresher developer', 'fresher engineer',
+        'new graduate', 'campus placement', 'campus hiring', 'college graduate',
+        '0-1 year', '0-2 years', 'no experience', 'beginner', 'starter position',
+        'trainee developer', 'junior developer', 'associate', 'apprentice'
     ]
 }
 

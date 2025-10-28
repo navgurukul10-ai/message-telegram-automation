@@ -35,7 +35,7 @@ def check_status():
     
     # Messages by category (from messages.job_type)
     print("\n📈 Jobs by Category (messages.job_type):")
-    cursor.execute("SELECT COUNT(*) FROM messages WHERE job_type LIKE '%tech%' AND job_type NOT LIKE '%non_tech%'")
+    cursor.execute("SELECT COUNT(*) FROM messages WHERE job_type = 'tech'")
     tech_count = cursor.fetchone()[0]
     print(f"   • Tech Jobs: {tech_count}")
     
