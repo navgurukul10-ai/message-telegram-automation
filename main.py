@@ -1,5 +1,5 @@
 """
-Main Entry Point - AI-Style Structure
+Main Entry Point - Standardized Structure
 Clean entry point for running the application
 """
 import sys

@@ -84,7 +84,7 @@ check_database() {
 }
 
 # Main execution
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 echo "Step 1: Fixing session files"
 echo "----------------------------"

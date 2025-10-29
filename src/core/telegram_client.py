@@ -27,7 +27,7 @@ import sys
 from config.settings import ACCOUNTS, RATE_LIMITS, MESSAGE_YEAR_FILTER, PATHS
 from src.utils.logger import get_logger
 from src.storage.database import DatabaseHandler
-from src.services.classifier import MessageClassifier
+from src.services.job_classifier import MessageClassifier
 from src.storage.csv_handler import CSVHandler
 from src.services.job_verifier import JobVerifier
 

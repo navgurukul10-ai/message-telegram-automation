@@ -9,7 +9,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.services.classifier import MessageClassifier
+from src.services.job_classifier import MessageClassifier
 from src.utils.logger import get_logger
 
 logger = get_logger('fix_job_types')

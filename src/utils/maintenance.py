@@ -7,7 +7,7 @@ import os
 from datetime import datetime
 
 from config.settings import PATHS, DATABASE
-from src.services.classifier import MessageClassifier
+from src.services.job_classifier import MessageClassifier
 from src.utils.logger import get_logger
 
 logger = get_logger('maintenance')

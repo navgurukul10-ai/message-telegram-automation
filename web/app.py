@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.settings import PATHS, DATABASE
-from src.services.job_scorer import JobQualityScorer
+from src.services.company_extractor import JobQualityScorer
 
 app = Flask(__name__)
 
@@ -749,11 +749,13 @@ if __name__ == '__main__':
     print("🌐 Starting Web Dashboard")
     print("="*60)
     print()
-    print("Dashboard will open at: http://localhost:7000")
+    print("Dashboard will open at: http://localhost:7001")
     print()
     print("Press Ctrl+C to stop")
     print("="*60)
     print()
     
-    app.run(debug=True, host='0.0.0.0', port=7000)
+    # Allow overriding port via environment variable for flexibility
+    port = int(os.getenv('DASHBOARD_PORT', os.getenv('PORT', '7001')))
+    app.run(debug=True, host='0.0.0.0', port=port)
 
