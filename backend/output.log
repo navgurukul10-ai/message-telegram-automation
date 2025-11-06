@@ -1,0 +1,64 @@
+nohup: ignoring input
+2025-10-14 21:49:41 - daily_run - INFO - ============================================================
+2025-10-14 21:49:41 - daily_run - INFO - Telegram Job Fetcher - DAILY MODE
+2025-10-14 21:49:41 - daily_run - INFO - ============================================================
+2025-10-14 21:49:41 - daily_run - INFO - Performing automatic maintenance...
+2025-10-14 21:49:41 - maintenance - INFO - ============================================================
+2025-10-14 21:49:41 - maintenance - INFO - 🔧 Starting Automatic Maintenance
+2025-10-14 21:49:41 - maintenance - INFO - ============================================================
+2025-10-14 21:49:41 - maintenance - INFO - Step 1: Fixing empty job types...
+2025-10-14 21:49:41 - maintenance - INFO - All messages already have job_type
+2025-10-14 21:49:41 - maintenance - INFO - Step 2: Syncing CSV files with database...
+2025-10-14 21:49:41 - maintenance - INFO - ✅ all_messages.csv: 2358 rows
+2025-10-14 21:49:41 - maintenance - INFO - ✅ tech_jobs.csv: 1933 rows
+2025-10-14 21:49:41 - maintenance - INFO - ✅ non_tech_jobs.csv: 313 rows
+2025-10-14 21:49:41 - maintenance - INFO - ✅ freelance_jobs.csv: 363 rows
+2025-10-14 21:49:41 - maintenance - INFO - ✅ joined_groups.csv: 43 rows
+2025-10-14 21:49:41 - maintenance - INFO - CSV sync completed successfully
+2025-10-14 21:49:41 - maintenance - INFO - ============================================================
+2025-10-14 21:49:41 - maintenance - INFO - ✅ Maintenance Completed
+2025-10-14 21:49:41 - maintenance - INFO - ============================================================
+2025-10-14 21:49:41 - daily_run - INFO - ✅ CSV files synced with database
+2025-10-14 21:49:41 - database - INFO - Database tables created successfully
+2025-10-14 21:49:41 - telegram_client - INFO - Loaded 2358 processed messages
+2025-10-14 21:49:41 - telegram_client - INFO - Loaded 43 joined groups
+2025-10-14 21:49:41 - daily_run - INFO - Initializing Telegram clients...
+2025-10-14 21:49:41 - telegram_client - INFO - Initializing Telegram clients...
+2025-10-14 21:49:41 - telegram_client - INFO - Connecting Account 1 (attempt 1/3)...
+Server resent the older message 7561111076261174273, ignoring
+2025-10-14 21:50:36 - telegram_client - INFO - Account Account 1 already authorized
+2025-10-14 21:50:36 - telegram_client - INFO - Connecting Account 2 (attempt 1/3)...
+2025-10-14 21:50:40 - telegram_client - INFO - Account Account 2 already authorized
+2025-10-14 21:50:40 - telegram_client - INFO - Connecting Account 3 (attempt 1/3)...
+2025-10-14 21:50:42 - telegram_client - INFO - Account Account 3 already authorized
+2025-10-14 21:50:42 - telegram_client - INFO - Connecting Account 4 (attempt 1/3)...
+Server resent the older message 7561111145475449857, ignoring
+2025-10-14 21:50:43 - telegram_client - INFO - Account Account 4 already authorized
+2025-10-14 21:50:43 - telegram_client - INFO - Initialized 4 clients successfully
+2025-10-14 21:50:43 - daily_run - INFO - Running for TODAY only (check every hour)
+2025-10-14 21:50:43 - daily_run - INFO - Working hours: 9 AM - 11 PM
+2025-10-14 21:50:43 - daily_run - INFO - Groups limit: 8 groups today
+2025-10-14 21:50:43 - daily_run - INFO - You can run this script daily for continuous operation
+2025-10-14 21:50:43 - telegram_client - INFO - Starting continuous run for 1 days...
+2025-10-14 21:50:43 - telegram_client - INFO - Loaded 857 groups from data.json
+2025-10-14 21:50:43 - telegram_client - INFO - Starting new fetch cycle...
+2025-10-14 21:50:43 - telegram_client - INFO - Starting to process 857 groups...
+Error executing high-level request after reconnect: <class 'sqlite3.OperationalError'>: database is locked
+Error executing high-level request after reconnect: <class 'sqlite3.OperationalError'>: database is locked
+2025-10-14 21:55:36 - telegram_client - INFO - Fetched 0 new job messages from Tech Jobs Occean 🇩🇿
+2025-10-14 21:55:36 - telegram_client - INFO - Processed 1/857 groups
+2025-10-14 22:00:19 - telegram_client - INFO - Fetched 0 new job messages from fullremote.it
+2025-10-14 22:00:19 - telegram_client - INFO - Processed 2/857 groups
+2025-10-14 22:00:25 - telegram_client - ERROR - Error fetching messages from https://t.me/Tech_Jobs_Ind: database is locked
+2025-10-14 22:00:25 - telegram_client - INFO - Processed 3/857 groups
+2025-10-14 22:05:00 - telegram_client - INFO - Fetched 0 new job messages from Linkedin Remote Jobs
+2025-10-14 22:05:00 - telegram_client - INFO - Processed 4/857 groups
+Server closed the connection: [Errno 104] Connection reset by peer
+2025-10-14 22:05:11 - telegram_client - INFO - Fetched job message: tech from DevITJobs.uk - Software Developer & IT Jobs in London and the United Kingdom (UK)
+2025-10-14 22:05:15 - telegram_client - INFO - Fetched job message: tech from DevITJobs.uk - Software Developer & IT Jobs in London and the United Kingdom (UK)
+Server closed the connection: [Errno 104] Connection reset by peer
+Server closed the connection: [Errno 104] Connection reset by peer
+2025-10-14 22:09:37 - telegram_client - INFO - Fetched 2 new job messages from DevITJobs.uk - Software Developer & IT Jobs in London and the United Kingdom (UK)
+2025-10-14 22:09:37 - telegram_client - INFO - Processed 5/857 groups
+Server closed the connection: [Errno 104] Connection reset by peer
+Server closed the connection: [Errno 104] Connection reset by peer

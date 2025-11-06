@@ -1,6 +1,0 @@
-{
-  "smtp_server": "smtp.gmail.com",
-  "smtp_port": 587,
-  "password": "your-app-specific-password-here"
-}
-
