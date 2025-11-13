@@ -1,5 +1,5 @@
 import React from 'react'
-import { Grid, Typography, TextField, MenuItem } from '@mui/material'
+import { Grid, Typography, TextField, MenuItem, FormControl, Select, InputLabel } from '@mui/material'
 import { api } from '../api/client'
 import JobMessageCard from '../components/JobMessageCard'
 
@@ -23,6 +23,7 @@ export default function Messages() {
   const [groupsByDate, setGroupsByDate] = React.useState([])
   const [groupNames, setGroupNames] = React.useState([])
   const [selected, setSelected] = React.useState('')
+  const [locationFilter, setLocationFilter] = React.useState('')
   const [data, setData] = React.useState([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState('')
@@ -54,6 +55,37 @@ export default function Messages() {
     return () => { mounted = false }
   }, [selected])
 
+  // Filter messages by location
+  const filteredData = React.useMemo(() => {
+    if (!locationFilter) return data
+    
+    return data.filter(m => {
+      const text = (m.text || '').toLowerCase()
+      const location = (m.location || '').toLowerCase()
+      
+      if (locationFilter === 'pan_india') {
+        return text.includes('india') || text.includes('indian') || 
+               text.includes('bangalore') || text.includes('mumbai') || 
+               text.includes('delhi') || text.includes('pune') || 
+               text.includes('hyderabad') || text.includes('chennai') ||
+               location.includes('india') || location.includes('indian') ||
+               location.includes('bangalore') || location.includes('mumbai') ||
+               location.includes('delhi') || location.includes('pune')
+      } else if (locationFilter === 'remote') {
+        return text.includes('remote') || text.includes('wfh') || 
+               text.includes('work from home') || 
+               location.includes('remote') || location.includes('wfh')
+      } else if (locationFilter === 'international') {
+        return text.includes('usa') || text.includes('uk') || 
+               text.includes('singapore') || text.includes('dubai') ||
+               text.includes('canada') || text.includes('australia') ||
+               location.includes('usa') || location.includes('uk') ||
+               location.includes('singapore') || location.includes('dubai')
+      }
+      return true
+    })
+  }, [data, locationFilter])
+
   return (
     <Grid container spacing={2}>
       <Grid item xs={12} md={6} lg={4}>
@@ -61,11 +93,28 @@ export default function Messages() {
           {groupNames.map(name => <MenuItem key={name} value={name}>{name}</MenuItem>)}
         </TextField>
       </Grid>
+      <Grid item xs={12} md={6} lg={4}>
+        <FormControl fullWidth>
+          <InputLabel id="location-filter-label">Location</InputLabel>
+          <Select
+            labelId="location-filter-label"
+            id="location-filter"
+            value={locationFilter}
+            label="Location"
+            onChange={(e) => setLocationFilter(e.target.value)}
+          >
+            <MenuItem value="">All Locations</MenuItem>
+            <MenuItem value="pan_india">Pan India</MenuItem>
+            <MenuItem value="remote">Remote</MenuItem>
+            <MenuItem value="international">International</MenuItem>
+          </Select>
+        </FormControl>
+      </Grid>
       <Grid item xs={12}>
         {loading ? <Typography>Loading...</Typography> : null}
         {error ? <Typography color="error">{error}</Typography> : null}
         <Grid container spacing={3}>
-          {data.map((m, i) => {
+          {filteredData.map((m, i) => {
             const applyLink = extractApplyLink(m.text)
             const applyHref = applyLink || `mailto:?subject=Application&body=${encodeURIComponent(m.text || '')}`
             const skills = m.keywords ? m.keywords.split(',').map(s => s.trim()).filter(Boolean) : []
@@ -77,6 +126,7 @@ export default function Messages() {
                   title={m.job_type ? `${m.job_type.replace('_', ' ')} Message` : 'Message'}
                   jobType={m.job_type}
                   date={m.date}
+                  location={m.location || ''}
                   skills={skills}
                   description={m.text}
                   applyLink={applyHref}
@@ -86,7 +136,7 @@ export default function Messages() {
             )
           })}
         </Grid>
-        {(!loading && data.length === 0) ? <Typography>No messages.</Typography> : null}
+        {(!loading && filteredData.length === 0) ? <Typography>No messages found{locationFilter ? ` for selected location filter` : ''}.</Typography> : null}
       </Grid>
     </Grid>
   )

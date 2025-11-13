@@ -1,5 +1,5 @@
 import React from 'react'
-import { Grid, Typography, Tabs, Tab } from '@mui/material'
+import { Grid, Typography, Tabs, Tab, FormControl, Select, MenuItem, InputLabel, Box } from '@mui/material'
 import { api } from '../api/client'
 import JobMessageCard from '../components/JobMessageCard'
 
@@ -25,6 +25,7 @@ export default function BestJobs() {
   const [data, setData] = React.useState([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
+  const [locationFilter, setLocationFilter] = React.useState('')
 
   React.useEffect(() => {
     let mounted = true
@@ -38,7 +39,7 @@ export default function BestJobs() {
     }
     const t = typeMap[tab]
     // Strategy: if 'Best Jobs', use best_jobs endpoint. Else fetch messages by type and apply a light quality filter.
-    const fetcher = t ? api.getMessages(t).then(list => list.filter(m => {
+    const fetcher = t ? api.getMessages(t, locationFilter || undefined).then(list => list.filter(m => {
       const text = (m.text || '').toLowerCase()
       const hasContact = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}|\+?\d{10,13}/.test(text)
       const hasApplyWord = text.includes('apply') || text.includes('send resume') || text.includes('email')
@@ -49,20 +50,20 @@ export default function BestJobs() {
       skills: m.skills,
       salary: '',
       work_mode: '',
-      location: '',
+      location: m.location || '',
       score: 60, // treated as qualifying
       date: m.date,
       group: m.group,
       apply_link: null,
       job_type: t
-    }))) : api.getBestJobs()
+    }))) : api.getBestJobs(locationFilter || undefined)
 
     fetcher
       .then(res => { if (mounted) setData(res) })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
     return () => { mounted = false }
-  }, [tab])
+  }, [tab, locationFilter])
 
   if (loading) return <>
     <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
@@ -77,6 +78,23 @@ export default function BestJobs() {
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
         {tabs.map((t, i) => <Tab key={i} label={t} />)}
       </Tabs>
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
+        <FormControl sx={{ minWidth: 200 }}>
+          <InputLabel id="location-filter-label">Filter by Location</InputLabel>
+          <Select
+            labelId="location-filter-label"
+            id="location-filter"
+            value={locationFilter}
+            label="Filter by Location"
+            onChange={(e) => setLocationFilter(e.target.value)}
+          >
+            <MenuItem value="">All Locations</MenuItem>
+            <MenuItem value="pan_india">Pan India</MenuItem>
+            <MenuItem value="remote">Remote</MenuItem>
+            <MenuItem value="international">International</MenuItem>
+          </Select>
+        </FormControl>
+      </Box>
       <Grid container spacing={3}>
         {data.map((job, i) => {
           const skills = (job.skills || '').split(',').map(s => s.trim()).filter(Boolean)
