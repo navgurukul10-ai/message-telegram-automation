@@ -8,6 +8,8 @@ asyncio==3.4.3
 
 # Web Dashboard
 Flask==3.0.0
+flask-cors==4.0.0  # CORS support for frontend API calls
+gunicorn==21.2.0  # Production WSGI server
 
 # Database
 # SQLite3 comes with Python standard library
@@ -16,5 +18,5 @@ Flask==3.0.0
 # csv and json come with Python standard library
 
 # Utilities
-python-dotenv==1.0.0  # Optional: for environment variables
+python-dotenv==1.0.0  # Environment variables
 
