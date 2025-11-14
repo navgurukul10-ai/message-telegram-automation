@@ -541,6 +541,17 @@
                 <button class="tab" onclick="showJobs('fresher')">Fresher Jobs</button>
             </div>
             
+            <!-- Location Filter -->
+            <div style="margin: 20px 0; display: flex; justify-content: flex-end; align-items: center; gap: 10px;">
+                <label for="locationFilter" style="font-weight: bold; color: #667eea;">Filter by Location:</label>
+                <select id="locationFilter" onchange="applyLocationFilter()" style="padding: 8px 15px; border: 2px solid #667eea; border-radius: 8px; font-size: 14px; background: white; color: #333; cursor: pointer; min-width: 200px;">
+                    <option value="">All Locations</option>
+                    <option value="pan_india">Pan India</option>
+                    <option value="remote">Remote</option>
+                    <option value="international">International</option>
+                </select>
+            </div>
+            
             <!-- Pagination Controls -->
             <div class="pagination-controls">
                 <button id="prevBtn" onclick="changePage(-1)" disabled>← Previous</button>
@@ -612,6 +623,17 @@
                 <button class="tab" onclick="filterDateJobType('fresher')">Fresher Jobs</button>
             </div>
             
+            <!-- Location Filter for Date Filter -->
+            <div id="dateLocationFilter" style="display: none; margin: 20px 0; justify-content: flex-end; align-items: center; gap: 10px;">
+                <label for="dateLocationFilterSelect" style="font-weight: bold; color: #2d3748;">Filter by Location:</label>
+                <select id="dateLocationFilterSelect" onchange="applyDateLocationFilter()" style="padding: 8px 15px; border: 2px solid #667eea; border-radius: 8px; font-size: 14px; background: white; color: #333; cursor: pointer; min-width: 200px;">
+                    <option value="">All Locations</option>
+                    <option value="pan_india">Pan India</option>
+                    <option value="remote">Remote</option>
+                    <option value="international">International</option>
+                </select>
+            </div>
+            
             <!-- Date Filtered Results -->
             <div id="dateFilteredJobs"></div>
         </div>
@@ -638,6 +660,7 @@
         let totalPages = 1;
         let currentJobType = 'best';
         let allJobs = [];
+        let currentLocationFilter = '';
         
         // Load data on page load
         window.onload = function() {
@@ -736,7 +759,8 @@
         
         async function loadBestJobs() {
             try {
-                const response = await fetch('/api/best_jobs');
+                const locationParam = currentLocationFilter ? `?location=${encodeURIComponent(currentLocationFilter)}` : '';
+                const response = await fetch(`/api/best_jobs${locationParam}`);
                 const data = await response.json();
 
                 // Normalize to common structure used by renderJobs()
@@ -760,6 +784,19 @@
             }
         }
         
+        function applyLocationFilter() {
+            const filterSelect = document.getElementById('locationFilter');
+            currentLocationFilter = filterSelect.value;
+            currentPage = 1;
+            
+            // Reload current job type with new location filter
+            if (currentJobType === 'best') {
+                loadBestJobs();
+            } else {
+                showJobs(currentJobType);
+            }
+        }
+        
         async function showJobs(type) {
             // Update active tab
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
@@ -776,7 +813,8 @@
             }
             
             try {
-                const response = await fetch(`/api/messages/${type}`);
+                const locationParam = currentLocationFilter ? `?location=${encodeURIComponent(currentLocationFilter)}` : '';
+                const response = await fetch(`/api/messages/${type}${locationParam}`);
                 allJobs = await response.json();
                 
                 totalPages = Math.ceil(allJobs.length / pageSize);
@@ -963,6 +1001,7 @@
         let currentSelectedDate = '';
         let currentDateJobType = 'all';
         let dateFilteredJobs = [];
+        let currentDateLocationFilter = '';
         
         async function loadAvailableDates() {
             try {
@@ -1000,6 +1039,7 @@
             
             // Show tabs and load jobs
             document.getElementById('dateFilterTabs').style.display = 'flex';
+            document.getElementById('dateLocationFilter').style.display = 'flex';
             
             // Reset active tab
             document.querySelectorAll('#dateFilterTabs .tab').forEach(tab => {
@@ -1024,12 +1064,23 @@
             await loadDateFilteredJobs(currentSelectedDate, jobType);
         }
         
+        function applyDateLocationFilter() {
+            const filterSelect = document.getElementById('dateLocationFilterSelect');
+            currentDateLocationFilter = filterSelect.value;
+            
+            // Reload date filtered jobs with new location filter
+            if (currentSelectedDate) {
+                loadDateFilteredJobs(currentSelectedDate, currentDateJobType);
+            }
+        }
+        
         async function loadDateFilteredJobs(date, jobType) {
             const resultsDiv = document.getElementById('dateFilteredJobs');
             resultsDiv.innerHTML = '<div class="loading">Loading...</div>';
             
             try {
-                const response = await fetch(`/api/messages_by_date/${date}/${jobType}`);
+                const locationParam = currentDateLocationFilter ? `?location=${encodeURIComponent(currentDateLocationFilter)}` : '';
+                const response = await fetch(`/api/messages_by_date/${date}/${jobType}${locationParam}`);
                 dateFilteredJobs = await response.json();
                 
                 // Update count

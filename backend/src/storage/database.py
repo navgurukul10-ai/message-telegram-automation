@@ -139,9 +139,17 @@ class DatabaseHandler:
                 job_type TEXT,
                 keywords_found TEXT,
                 account_used TEXT,
+                job_location TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # Add job_location column if it doesn't exist (for existing databases)
+        try:
+            cursor.execute('ALTER TABLE messages ADD COLUMN job_location TEXT')
+        except sqlite3.OperationalError:
+            # Column already exists, ignore
+            pass
         
         # Groups table
         cursor.execute('''
@@ -209,8 +217,8 @@ class DatabaseHandler:
                 cursor.execute('''
                     INSERT OR IGNORE INTO messages 
                     (message_id, group_name, group_link, sender, date, message_text, 
-                     job_type, keywords_found, account_used)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     job_type, keywords_found, account_used, job_location)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     message_data['message_id'],
                     message_data['group_name'],
@@ -220,7 +228,8 @@ class DatabaseHandler:
                     message_data['message_text'],
                     message_data['job_type'],
                     message_data['keywords_found'],
-                    message_data['account_used']
+                    message_data['account_used'],
+                    message_data.get('job_location', '')
                 ))
                 
                 # Insert into category-specific table with enhanced fields
