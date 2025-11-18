@@ -100,22 +100,32 @@ class TelegramJobFetcher:
                 try:
                     session_path = os.path.join(PATHS['sessions'], account['session_name'])
                     
+                    # Check network connectivity first
+                    if attempt == 0:
+                        try:
+                            import socket
+                            socket.create_connection(("8.8.8.8", 53), timeout=5)
+                        except OSError:
+                            logger.warning("⚠️  No internet connection detected. Waiting 10 seconds...")
+                            await asyncio.sleep(10)
+                            continue
+                    
                     # Create client with optimized timeout settings
                     client = TelegramClient(
                         session_path,
                         account['api_id'],
                         account['api_hash'],
-                        connection_retries=5,
-                        retry_delay=5,
-                        timeout=60,  # Increased timeout to 60 seconds
-                        request_retries=5,
-                        auto_reconnect=True,  # Enable auto-reconnect
+                        connection_retries=3,  # Reduced internal retries, we handle retries externally
+                        retry_delay=3,
+                        timeout=120,  # Increased timeout to 120 seconds for slow networks
+                        request_retries=3,
+                        auto_reconnect=False,  # Disable auto-reconnect to avoid AttributeError issues
                         flood_sleep_threshold=0  # Handle flood waits manually
                     )
                     
                     # Try to connect with timeout handling
                     logger.info(f"Connecting {account['name']} (attempt {attempt + 1}/{max_retries})...")
-                    await asyncio.wait_for(client.connect(), timeout=90)
+                    await asyncio.wait_for(client.connect(), timeout=150)  # Increased to 150 seconds
                     
                     # Verify connection is healthy
                     if not await client.is_user_authorized():
@@ -151,31 +161,42 @@ class TelegramJobFetcher:
                     if attempt < max_retries - 1:
                         logger.info(f"Retrying in {retry_delay} seconds...")
                         await asyncio.sleep(retry_delay)
-                        retry_delay = min(retry_delay * 2, 120)  # Cap at 2 minutes
+                        retry_delay = min(retry_delay * 2, 180)  # Cap at 3 minutes
                     else:
                         logger.error(f"❌ Failed to connect {account['name']} after {max_retries} attempts")
+                        logger.error("💡 Possible causes: Slow internet, Telegram server issues, or firewall blocking")
                     
                     # Cleanup failed client
                     if client:
                         try:
-                            await asyncio.wait_for(client.disconnect(), timeout=10)
-                        except:
-                            pass
+                            if hasattr(client, 'disconnect'):
+                                await asyncio.wait_for(client.disconnect(), timeout=10)
+                        except Exception as cleanup_error:
+                            logger.debug(f"Cleanup error (ignored): {cleanup_error}")
+                        client = None
                 
-                except (ConnectionError, OSError, ServerError, RpcCallFailError) as e:
-                    logger.warning(f"🔌 Network error for {account['name']}: {e}")
+                except (ConnectionError, OSError, ServerError, RpcCallFailError, AttributeError) as e:
+                    error_msg = str(e)
+                    if 'NoneType' in error_msg or 'connect' in error_msg:
+                        logger.warning(f"🔌 Telethon connection error for {account['name']}: {e}")
+                    else:
+                        logger.warning(f"🔌 Network error for {account['name']}: {e}")
+                    
                     if attempt < max_retries - 1:
                         logger.info(f"Connection issue detected. Retrying in {retry_delay} seconds...")
                         await asyncio.sleep(retry_delay)
-                        retry_delay = min(retry_delay * 2, 120)
+                        retry_delay = min(retry_delay * 2, 180)  # Cap at 3 minutes
                     else:
                         logger.error(f"❌ Network issues persist for {account['name']}. Skipping.")
                     
+                    # Cleanup client properly
                     if client:
                         try:
-                            await asyncio.wait_for(client.disconnect(), timeout=10)
-                        except:
-                            pass
+                            if hasattr(client, 'disconnect'):
+                                await asyncio.wait_for(client.disconnect(), timeout=10)
+                        except Exception as cleanup_error:
+                            logger.debug(f"Cleanup error (ignored): {cleanup_error}")
+                        client = None
                 
                 except AuthKeyError as e:
                     logger.error(f"🔑 Auth key error for {account['name']}: {e}")
@@ -229,17 +250,35 @@ class TelegramJobFetcher:
     
     async def _safe_db_write(self, write_func, *args, **kwargs):
         """Safely write to database with locking to prevent concurrent access"""
-        async with self._db_write_lock:
-            # Add small delay between writes to prevent lock contention
-            current_time = asyncio.get_event_loop().time()
-            time_since_last_write = current_time - self._last_db_write
-            if time_since_last_write < 0.1:  # 100ms minimum between writes
-                await asyncio.sleep(0.1 - time_since_last_write)
-            
-            # Perform the write
-            result = write_func(*args, **kwargs)
-            self._last_db_write = asyncio.get_event_loop().time()
-            return result
+        max_retries = 10  # Increased retries for database locks
+        retry_delay = 2
+        
+        for attempt in range(max_retries):
+            async with self._db_write_lock:
+                try:
+                    # Add small delay between writes to prevent lock contention
+                    current_time = asyncio.get_event_loop().time()
+                    time_since_last_write = current_time - self._last_db_write
+                    if time_since_last_write < 0.2:  # 200ms minimum between writes
+                        await asyncio.sleep(0.2 - time_since_last_write)
+                    
+                    # Perform the write
+                    result = write_func(*args, **kwargs)
+                    self._last_db_write = asyncio.get_event_loop().time()
+                    return result
+                    
+                except sqlite3.OperationalError as e:
+                    if 'database is locked' in str(e) and attempt < max_retries - 1:
+                        logger.warning(f"💾 Database locked in _safe_db_write (attempt {attempt + 1}/{max_retries}), waiting {retry_delay}s...")
+                        await asyncio.sleep(retry_delay)
+                        retry_delay = min(retry_delay * 1.5, 15)  # Exponential backoff, max 15s
+                        continue
+                    else:
+                        logger.error(f"Database error in _safe_db_write after {max_retries} attempts: {e}")
+                        return False  # Return False instead of raising to allow graceful handling
+                except Exception as e:
+                    logger.error(f"Error in _safe_db_write: {e}")
+                    return False  # Return False instead of raising to allow graceful handling
     
     def _is_working_hours(self):
         """Check if current time is within working hours"""
@@ -351,7 +390,7 @@ class TelegramJobFetcher:
     
     async def fetch_messages(self, group_link, client_info, limit=None):
         """Fetch messages from a group with robust error handling"""
-        max_retries = 3
+        max_retries = 5  # Increased from 3 to handle database locks better
         
         for retry in range(max_retries):
             try:
@@ -454,25 +493,35 @@ class TelegramJobFetcher:
                                    f"Company: {verification_result['company_name']}")
                     
                     # Save to database (will go to category-specific table too) with safe locking
-                    await self._safe_db_write(self.db.insert_message, message_data)
+                    db_success = await self._safe_db_write(self.db.insert_message, message_data)
+                    if not db_success:
+                        logger.warning(f"⚠️  Database write failed for message {message_id} after retries, saving to CSV only")
                     
-                    # Save to CSV
-                    self.csv_handler.write_message(message_data)
+                    # Always save to CSV (even if DB write failed)
+                    try:
+                        self.csv_handler.write_message(message_data)
+                    except Exception as csv_error:
+                        logger.error(f"❌ CSV write error for message {message_id}: {csv_error}")
                     
-                    # Update tracking
+                    # Update tracking and count even if DB write failed (CSV backup exists)
                     self.processed_messages.add(message_id)
                     messages.append(message_data)
                     new_messages_count += 1
                     
                     logger.info(f"Fetched job message: {job_type} from {group_name}")
                 
-                # Update account usage with safe locking
+                # Update account usage with safe locking (non-critical, continue even if it fails)
                 if new_messages_count > 0:
-                    await self._safe_db_write(
-                        self.db.update_account_usage,
-                        account['name'],
-                        messages_fetched=new_messages_count
-                    )
+                    try:
+                        usage_success = await self._safe_db_write(
+                            self.db.update_account_usage,
+                            account['name'],
+                            messages_fetched=new_messages_count
+                        )
+                        if not usage_success:
+                            logger.debug(f"Account usage update failed for {account['name']} (non-critical)")
+                    except Exception as usage_error:
+                        logger.debug(f"Account usage update error (non-critical): {usage_error}")
                 
                 # Log with more detail
                 if new_messages_count > 0:
@@ -494,18 +543,43 @@ class TelegramJobFetcher:
                 await asyncio.sleep(e.seconds)
                 return []
             
-            except (ConnectionError, OSError, ServerError, RpcCallFailError) as e:
+            except (ConnectionError, OSError, ServerError, RpcCallFailError, AttributeError) as e:
+                error_str = str(e).lower()
+                is_disconnected = 'disconnected' in error_str or 'cannot send' in error_str
+                
                 logger.warning(f"🔌 Network error fetching from {group_link}: {e} (attempt {retry + 1}/{max_retries})")
+                
+                if is_disconnected and client_info and client_info.get('client'):
+                    try:
+                        # Try to reconnect the client
+                        logger.info("🔄 Attempting to reconnect client...")
+                        client = client_info['client']
+                        if not client.is_connected():
+                            await client.connect()
+                            logger.info("✅ Client reconnected successfully")
+                        else:
+                            # Force reconnect
+                            await client.disconnect()
+                            await asyncio.sleep(2)
+                            await client.connect()
+                            logger.info("✅ Client reconnected successfully")
+                    except Exception as reconnect_error:
+                        logger.warning(f"⚠️  Reconnection failed: {reconnect_error}")
+                
                 if retry < max_retries - 1:
-                    logger.info("Network issue detected, retrying in 15 seconds...")
-                    await asyncio.sleep(15)
+                    # Exponential backoff: 15s, 30s, 45s
+                    wait_time = min(15 * (retry + 1), 45)
+                    logger.info(f"Network issue detected, retrying in {wait_time} seconds...")
+                    await asyncio.sleep(wait_time)
                     continue
                 return []
             
             except sqlite3.OperationalError as e:
                 if 'database is locked' in str(e):
                     logger.warning(f"💾 Database locked, waiting... (attempt {retry + 1}/{max_retries})")
-                    await asyncio.sleep(5)
+                    # Exponential backoff: 5s, 10s, 20s, 30s
+                    wait_time = min(5 * (2 ** retry), 30)
+                    await asyncio.sleep(wait_time)
                     if retry < max_retries - 1:
                         continue
                 logger.error(f"Database error: {e}")
