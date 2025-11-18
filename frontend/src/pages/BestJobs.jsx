@@ -115,7 +115,7 @@ export default function BestJobs() {
                 skills={skills}
                 description={job.message || job.message_text}
                 applyLink={applyHref}
-                applyText="View Details"
+                applyText="Apply Now"
               />
             </Grid>
           )

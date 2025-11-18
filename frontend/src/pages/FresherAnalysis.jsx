@@ -104,7 +104,7 @@ export default function FresherAnalysis() {
                   skills={skills}
                   description={j.text}
                   applyLink={applyHref}
-                  applyText="View Details"
+                  applyText="Apply Now"
                 />
               </Grid>
             )

@@ -7,6 +7,7 @@ import sqlite3
 import os
 import sys
 from datetime import datetime, timedelta
+from flask_cors import CORS
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,7 +16,10 @@ from config.settings import PATHS, DATABASE
 from src.services.job_scorer import JobQualityScorer
 from src.utils.location_categorizer import LocationCategorizer
 
+# Enable CORS for all API routes
 app = Flask(__name__)
+# Enable CORS for all API routes
+CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}})
 
 def get_db_connection():
     """Get database connection"""

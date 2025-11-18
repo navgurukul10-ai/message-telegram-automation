@@ -63,7 +63,7 @@ export default function GroupDetails() {
               skills={skills}
               description={m.text}
               applyLink={applyHref}
-              applyText="View Details"
+              applyText="Apply Now"
             />
           </Grid>
         )
