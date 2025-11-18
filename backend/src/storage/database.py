@@ -40,29 +40,53 @@ class DatabaseHandler:
         self.db_path = os.path.join(PATHS['database'], DATABASE['name'])
         self.connection = None
         self._last_connection_time = {}
+        self._connection_lock = None
         self.create_tables()
         self._initialized = True
     
     def connect(self):
         """Establish database connection with optimized settings"""
         try:
-            # Add timeout to prevent locking issues (30 seconds)
-            self.connection = sqlite3.connect(
+            # Add timeout to prevent locking issues (60 seconds for better concurrency)
+            conn = sqlite3.connect(
                 self.db_path,
-                timeout=30.0,  # Wait up to 30 seconds for locks to clear
+                timeout=60.0,  # Wait up to 60 seconds for locks to clear
                 isolation_level=None  # Autocommit mode for better concurrency
             )
-            self.connection.row_factory = sqlite3.Row
+            conn.row_factory = sqlite3.Row
             
             # Enable WAL mode for better concurrent access
             # WAL allows multiple readers while one writer is active
-            cursor = self.connection.cursor()
+            cursor = conn.cursor()
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA synchronous=NORMAL")  # Faster writes
-            cursor.execute("PRAGMA busy_timeout=30000")  # 30 second busy timeout
+            cursor.execute("PRAGMA busy_timeout=60000")  # 60 second busy timeout
             cursor.execute("PRAGMA cache_size=-64000")  # 64MB cache
+            cursor.execute("PRAGMA foreign_keys=OFF")  # Disable foreign keys for faster writes
             
-            return self.connection
+            return conn
+        except sqlite3.OperationalError as e:
+            if 'database is locked' in str(e):
+                logger.warning(f"Database locked, waiting... Error: {e}")
+                # Wait a bit and retry once
+                time.sleep(2)
+                try:
+                    conn = sqlite3.connect(
+                        self.db_path,
+                        timeout=60.0,
+                        isolation_level=None
+                    )
+                    conn.row_factory = sqlite3.Row
+                    cursor = conn.cursor()
+                    cursor.execute("PRAGMA journal_mode=WAL")
+                    cursor.execute("PRAGMA busy_timeout=60000")
+                    return conn
+                except Exception as retry_e:
+                    logger.error(f"Database connection retry failed: {retry_e}")
+                    raise
+            else:
+                logger.error(f"Database connection error: {e}")
+                raise
         except Exception as e:
             logger.error(f"Database connection error: {e}")
             raise
@@ -210,8 +234,10 @@ class DatabaseHandler:
                 conn = self.connect()
                 cursor = conn.cursor()
                 
-                # Set busy timeout for this connection
+                # Set busy timeout and WAL mode for this connection
+                cursor.execute("PRAGMA journal_mode=WAL")
                 cursor.execute("PRAGMA busy_timeout=60000")  # 60 seconds
+                cursor.execute("PRAGMA synchronous=NORMAL")
                 
                 # Insert into main messages table
                 cursor.execute('''
@@ -248,7 +274,7 @@ class DatabaseHandler:
                         except:
                             pass
                     time.sleep(retry_delay)
-                    retry_delay = min(retry_delay * 2, 10)  # Exponential backoff, max 10s
+                    retry_delay = min(retry_delay * 2, 20)  # Exponential backoff, max 20s
                     continue
                 else:
                     logger.error(f"Error inserting message after {max_retries} attempts: {e}")
