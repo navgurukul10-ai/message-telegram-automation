@@ -498,9 +498,14 @@ def get_messages(job_type):
     conn.close()
     return jsonify(messages)
 
-@app.route('/api/group_details/<group_name>')
+@app.route('/api/group_details/<path:group_name>')
 def get_group_details(group_name):
     """Get detailed information about a specific group"""
+    from urllib.parse import unquote
+    
+    # Decode URL-encoded group name
+    group_name = unquote(group_name)
+    
     conn = get_db_connection()
     cursor = conn.cursor()
     
