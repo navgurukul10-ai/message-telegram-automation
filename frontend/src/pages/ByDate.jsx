@@ -32,9 +32,18 @@ export default function ByDate() {
   const [selectedDate, setSelectedDate] = React.useState('')
   const [type, setType] = React.useState('all')
   const [locationFilter, setLocationFilter] = React.useState('')
+  const [skillsFilter, setSkillsFilter] = React.useState('')
+  const [availableSkills, setAvailableSkills] = React.useState([])
   const [data, setData] = React.useState([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState('')
+
+  React.useEffect(() => {
+    // Load available skills on mount
+    api.getSkills()
+      .then(skills => setAvailableSkills(skills))
+      .catch(err => console.error('Error loading skills:', err))
+  }, [])
 
   React.useEffect(() => {
     let mounted = true
@@ -48,12 +57,12 @@ export default function ByDate() {
     if (!selectedDate) return
     let mounted = true
     setLoading(true)
-    api.getMessagesByDate(selectedDate, type, locationFilter || undefined)
+    api.getMessagesByDate(selectedDate, type, locationFilter || undefined, skillsFilter || undefined)
       .then(res => { if (mounted) setData(res) })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
     return () => { mounted = false }
-  }, [selectedDate, type, locationFilter])
+  }, [selectedDate, type, locationFilter, skillsFilter])
 
   return (
     <Grid container spacing={2}>
@@ -81,6 +90,25 @@ export default function ByDate() {
             <MenuItem value="pan_india">Pan India</MenuItem>
             <MenuItem value="remote">Remote</MenuItem>
             <MenuItem value="international">International</MenuItem>
+          </Select>
+        </FormControl>
+      </Grid>
+      <Grid item xs={12} md={3}>
+        <FormControl fullWidth>
+          <InputLabel id="skills-filter-label">Skills</InputLabel>
+          <Select
+            labelId="skills-filter-label"
+            id="skills-filter"
+            value={skillsFilter}
+            label="Skills"
+            onChange={(e) => setSkillsFilter(e.target.value)}
+          >
+            <MenuItem value="">All Skills</MenuItem>
+            {availableSkills.map((skill, idx) => (
+              <MenuItem key={idx} value={skill}>
+                {skill.charAt(0).toUpperCase() + skill.slice(1)}
+              </MenuItem>
+            ))}
           </Select>
         </FormControl>
       </Grid>
