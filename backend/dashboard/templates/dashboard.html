@@ -541,14 +541,19 @@
                 <button class="tab" onclick="showJobs('fresher')">Fresher Jobs</button>
             </div>
             
-            <!-- Location Filter -->
-            <div style="margin: 20px 0; display: flex; justify-content: flex-end; align-items: center; gap: 10px;">
+            <!-- Filters -->
+            <div style="margin: 20px 0; display: flex; justify-content: flex-end; align-items: center; gap: 10px; flex-wrap: wrap;">
                 <label for="locationFilter" style="font-weight: bold; color: #667eea;">Filter by Location:</label>
                 <select id="locationFilter" onchange="applyLocationFilter()" style="padding: 8px 15px; border: 2px solid #667eea; border-radius: 8px; font-size: 14px; background: white; color: #333; cursor: pointer; min-width: 200px;">
                     <option value="">All Locations</option>
                     <option value="pan_india">Pan India</option>
                     <option value="remote">Remote</option>
                     <option value="international">International</option>
+                </select>
+                
+                <label for="skillsFilter" style="font-weight: bold; color: #667eea; margin-left: 15px;">Filter by Skills:</label>
+                <select id="skillsFilter" onchange="applySkillsFilter()" style="padding: 8px 15px; border: 2px solid #667eea; border-radius: 8px; font-size: 14px; background: white; color: #333; cursor: pointer; min-width: 200px;">
+                    <option value="">All Skills</option>
                 </select>
             </div>
             
@@ -623,14 +628,19 @@
                 <button class="tab" onclick="filterDateJobType('fresher')">Fresher Jobs</button>
             </div>
             
-            <!-- Location Filter for Date Filter -->
-            <div id="dateLocationFilter" style="display: none; margin: 20px 0; justify-content: flex-end; align-items: center; gap: 10px;">
+            <!-- Filters for Date Filter -->
+            <div id="dateFilters" style="display: none; margin: 20px 0; justify-content: flex-end; align-items: center; gap: 10px; flex-wrap: wrap;">
                 <label for="dateLocationFilterSelect" style="font-weight: bold; color: #2d3748;">Filter by Location:</label>
                 <select id="dateLocationFilterSelect" onchange="applyDateLocationFilter()" style="padding: 8px 15px; border: 2px solid #667eea; border-radius: 8px; font-size: 14px; background: white; color: #333; cursor: pointer; min-width: 200px;">
                     <option value="">All Locations</option>
                     <option value="pan_india">Pan India</option>
                     <option value="remote">Remote</option>
                     <option value="international">International</option>
+                </select>
+                
+                <label for="dateSkillsFilterSelect" style="font-weight: bold; color: #2d3748; margin-left: 15px;">Filter by Skills:</label>
+                <select id="dateSkillsFilterSelect" onchange="applyDateSkillsFilter()" style="padding: 8px 15px; border: 2px solid #667eea; border-radius: 8px; font-size: 14px; background: white; color: #333; cursor: pointer; min-width: 200px;">
+                    <option value="">All Skills</option>
                 </select>
             </div>
             
@@ -661,13 +671,43 @@
         let currentJobType = 'best';
         let allJobs = [];
         let currentLocationFilter = '';
+        let currentSkillsFilter = '';
+        let allSkills = [];
+        let currentDateLocationFilter = '';
+        let currentDateSkillsFilter = '';
         
         // Load data on page load
         window.onload = function() {
+            loadSkills();
             loadData();
             // Auto-refresh every 5 minutes
             setInterval(loadData, 300000);
         };
+        
+        async function loadSkills() {
+            try {
+                const response = await fetch('/api/skills');
+                allSkills = await response.json();
+                
+                // Populate skills filter dropdowns
+                const skillsFilter = document.getElementById('skillsFilter');
+                const dateSkillsFilter = document.getElementById('dateSkillsFilterSelect');
+                
+                allSkills.forEach(skill => {
+                    const option1 = document.createElement('option');
+                    option1.value = skill;
+                    option1.textContent = skill.charAt(0).toUpperCase() + skill.slice(1);
+                    skillsFilter.appendChild(option1);
+                    
+                    const option2 = document.createElement('option');
+                    option2.value = skill;
+                    option2.textContent = skill.charAt(0).toUpperCase() + skill.slice(1);
+                    dateSkillsFilter.appendChild(option2);
+                });
+            } catch (error) {
+                console.error('Error loading skills:', error);
+            }
+        }
         
         function loadData() {
             loadStats();
@@ -759,8 +799,11 @@
         
         async function loadBestJobs() {
             try {
-                const locationParam = currentLocationFilter ? `?location=${encodeURIComponent(currentLocationFilter)}` : '';
-                const response = await fetch(`/api/best_jobs${locationParam}`);
+                const params = new URLSearchParams();
+                if (currentLocationFilter) params.append('location', currentLocationFilter);
+                if (currentSkillsFilter) params.append('skills', currentSkillsFilter);
+                const queryString = params.toString() ? `?${params.toString()}` : '';
+                const response = await fetch(`/api/best_jobs${queryString}`);
                 const data = await response.json();
 
                 // Normalize to common structure used by renderJobs()
@@ -797,6 +840,19 @@
             }
         }
         
+        function applySkillsFilter() {
+            const filterSelect = document.getElementById('skillsFilter');
+            currentSkillsFilter = filterSelect.value;
+            currentPage = 1;
+            
+            // Reload current job type with new skills filter
+            if (currentJobType === 'best') {
+                loadBestJobs();
+            } else {
+                showJobs(currentJobType);
+            }
+        }
+        
         async function showJobs(type) {
             // Update active tab
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
@@ -813,8 +869,11 @@
             }
             
             try {
-                const locationParam = currentLocationFilter ? `?location=${encodeURIComponent(currentLocationFilter)}` : '';
-                const response = await fetch(`/api/messages/${type}${locationParam}`);
+                const params = new URLSearchParams();
+                if (currentLocationFilter) params.append('location', currentLocationFilter);
+                if (currentSkillsFilter) params.append('skills', currentSkillsFilter);
+                const queryString = params.toString() ? `?${params.toString()}` : '';
+                const response = await fetch(`/api/messages/${type}${queryString}`);
                 allJobs = await response.json();
                 
                 totalPages = Math.ceil(allJobs.length / pageSize);
@@ -1039,7 +1098,7 @@
             
             // Show tabs and load jobs
             document.getElementById('dateFilterTabs').style.display = 'flex';
-            document.getElementById('dateLocationFilter').style.display = 'flex';
+            document.getElementById('dateFilters').style.display = 'flex';
             
             // Reset active tab
             document.querySelectorAll('#dateFilterTabs .tab').forEach(tab => {
@@ -1074,13 +1133,26 @@
             }
         }
         
+        function applyDateSkillsFilter() {
+            const filterSelect = document.getElementById('dateSkillsFilterSelect');
+            currentDateSkillsFilter = filterSelect.value;
+            
+            // Reload date filtered jobs with new skills filter
+            if (currentSelectedDate) {
+                loadDateFilteredJobs(currentSelectedDate, currentDateJobType);
+            }
+        }
+        
         async function loadDateFilteredJobs(date, jobType) {
             const resultsDiv = document.getElementById('dateFilteredJobs');
             resultsDiv.innerHTML = '<div class="loading">Loading...</div>';
             
             try {
-                const locationParam = currentDateLocationFilter ? `?location=${encodeURIComponent(currentDateLocationFilter)}` : '';
-                const response = await fetch(`/api/messages_by_date/${date}/${jobType}${locationParam}`);
+                const params = new URLSearchParams();
+                if (currentDateLocationFilter) params.append('location', currentDateLocationFilter);
+                if (currentDateSkillsFilter) params.append('skills', currentDateSkillsFilter);
+                const queryString = params.toString() ? `?${params.toString()}` : '';
+                const response = await fetch(`/api/messages_by_date/${date}/${jobType}${queryString}`);
                 dateFilteredJobs = await response.json();
                 
                 // Update count

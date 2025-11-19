@@ -26,6 +26,15 @@ export default function BestJobs() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
   const [locationFilter, setLocationFilter] = React.useState('')
+  const [skillsFilter, setSkillsFilter] = React.useState('')
+  const [availableSkills, setAvailableSkills] = React.useState([])
+
+  React.useEffect(() => {
+    // Load available skills on mount
+    api.getSkills()
+      .then(skills => setAvailableSkills(skills))
+      .catch(err => console.error('Error loading skills:', err))
+  }, [])
 
   React.useEffect(() => {
     let mounted = true
@@ -39,7 +48,7 @@ export default function BestJobs() {
     }
     const t = typeMap[tab]
     // Strategy: if 'Best Jobs', use best_jobs endpoint. Else fetch messages by type and apply a light quality filter.
-    const fetcher = t ? api.getMessages(t, locationFilter || undefined).then(list => list.filter(m => {
+    const fetcher = t ? api.getMessages(t, locationFilter || undefined, skillsFilter || undefined).then(list => list.filter(m => {
       const text = (m.text || '').toLowerCase()
       const hasContact = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}|\+?\d{10,13}/.test(text)
       const hasApplyWord = text.includes('apply') || text.includes('send resume') || text.includes('email')
@@ -56,14 +65,14 @@ export default function BestJobs() {
       group: m.group,
       apply_link: null,
       job_type: t
-    }))) : api.getBestJobs(locationFilter || undefined)
+    }))) : api.getBestJobs(locationFilter || undefined, skillsFilter || undefined)
 
     fetcher
       .then(res => { if (mounted) setData(res) })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
     return () => { mounted = false }
-  }, [tab, locationFilter])
+  }, [tab, locationFilter, skillsFilter])
 
   if (loading) return <>
     <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
@@ -78,7 +87,7 @@ export default function BestJobs() {
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
         {tabs.map((t, i) => <Tab key={i} label={t} />)}
       </Tabs>
-      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end', gap: 2, flexWrap: 'wrap' }}>
         <FormControl sx={{ minWidth: 200 }}>
           <InputLabel id="location-filter-label">Filter by Location</InputLabel>
           <Select
@@ -92,6 +101,23 @@ export default function BestJobs() {
             <MenuItem value="pan_india">Pan India</MenuItem>
             <MenuItem value="remote">Remote</MenuItem>
             <MenuItem value="international">International</MenuItem>
+          </Select>
+        </FormControl>
+        <FormControl sx={{ minWidth: 200 }}>
+          <InputLabel id="skills-filter-label">Filter by Skills</InputLabel>
+          <Select
+            labelId="skills-filter-label"
+            id="skills-filter"
+            value={skillsFilter}
+            label="Filter by Skills"
+            onChange={(e) => setSkillsFilter(e.target.value)}
+          >
+            <MenuItem value="">All Skills</MenuItem>
+            {availableSkills.map((skill, idx) => (
+              <MenuItem key={idx} value={skill}>
+                {skill.charAt(0).toUpperCase() + skill.slice(1)}
+              </MenuItem>
+            ))}
           </Select>
         </FormControl>
       </Box>
