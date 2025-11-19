@@ -1,0 +1,43 @@
+# Sensitive Configuration (DO NOT COMMIT!)
+config.py
+
+# Telegram Sessions
+sessions/*.session
+sessions/*.session-journal
+
+# Data files
+# Ignore all CSV files anywhere in the project
+*.csv
+data/json/*.json
+data/database/*.db
+
+# Logs
+logs/*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keep directory structure
+!data/csv/.gitkeep
+!data/json/.gitkeep
+!data/database/.gitkeep
+!logs/.gitkeep
+!sessions/.gitkeep
+
