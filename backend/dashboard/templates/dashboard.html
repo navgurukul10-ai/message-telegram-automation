@@ -896,9 +896,19 @@
                 // Extract job title from message
                 const jobTitle = job.text.split('\n')[0] || 'Job Position';
                 
+                // Clean URL by removing special characters from start and end
+                function cleanUrl(url) {
+                    if (!url) return url;
+                    // Remove special characters from start (common markdown/formatting chars)
+                    url = url.replace(/^[*_~`\[\](){}|\\^<>"']+/, '');
+                    // Remove special characters from end (punctuation and formatting)
+                    url = url.replace(/[*_~`\[\](){}|\\^<>"',.;:)>]+$/, '');
+                    return url.trim();
+                }
+                
                 // Extract apply link from message - detect any URL (http/https/www)
                 const urlMatch = job.text.match(/(https?:\/\/\S+|www\.\S+)/i);
-                const applyLink = urlMatch ? urlMatch[1].trim().replace(/[)>.,]+$/, '') : '';
+                const applyLink = urlMatch ? cleanUrl(urlMatch[1].trim()) : '';
                 
                 // Check if it's a real URL (not email)
                 const isRealUrl = applyLink && (
@@ -1186,10 +1196,18 @@
             
             let html = '<div style="margin-top: 20px;">';
             
+            // Clean URL function
+            function cleanUrl(url) {
+                if (!url) return url;
+                url = url.replace(/^[*_~`\[\](){}|\\^<>"']+/, '');
+                url = url.replace(/[*_~`\[\](){}|\\^<>"',.;:)>]+$/, '');
+                return url.trim();
+            }
+            
             dateFilteredJobs.forEach(job => {
                 const jobTitle = job.text.split('\n')[0] || 'Job Position';
                 const urlMatch = job.text.match(/(https?:\/\/\S+|www\.\S+)/i);
-                const applyLink = urlMatch ? urlMatch[1].trim().replace(/[)>.,]+$/, '') : '';
+                const applyLink = urlMatch ? cleanUrl(urlMatch[1].trim()) : '';
                 const isRealUrl = applyLink && (
                     applyLink.startsWith('http://') || 
                     applyLink.startsWith('https://') || 
@@ -1404,10 +1422,18 @@
                 </h4>
             `;
             
+            // Clean URL function
+            function cleanUrl(url) {
+                if (!url) return url;
+                url = url.replace(/^[*_~`\[\](){}|\\^<>"']+/, '');
+                url = url.replace(/[*_~`\[\](){}|\\^<>"',.;:)>]+$/, '');
+                return url.trim();
+            }
+            
             jobsToShow.forEach(job => {
                 const jobTitle = job.text.split('\n')[0] || 'Job Position';
                 const urlMatch = job.text.match(/(https?:\/\/\S+|www\.\S+)/i);
-                const applyLink = urlMatch ? urlMatch[1].trim().replace(/[)>.,]+$/, '') : '';
+                const applyLink = urlMatch ? cleanUrl(urlMatch[1].trim()) : '';
                 const isRealUrl = applyLink && (
                     applyLink.startsWith('http://') || 
                     applyLink.startsWith('https://') || 

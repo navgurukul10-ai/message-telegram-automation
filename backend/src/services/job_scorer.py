@@ -134,8 +134,10 @@ class JobQualityScorer:
         # Check for apply link - URL only, not email (20 points)
         apply_link = self._find_first_match(message_text, self.apply_link_patterns)
         if apply_link and not re.search(r'@', apply_link):
+            # Clean the link by removing special characters from start and end
+            apply_link = self._clean_url(apply_link)
             result['has_apply_link'] = True
-            result['apply_link'] = apply_link.strip()
+            result['apply_link'] = apply_link
             score += 20
         
         # Check for location (15 points)
@@ -170,6 +172,19 @@ class JobQualityScorer:
         
         result['total_score'] = score
         return result
+    
+    def _clean_url(self, url: str) -> str:
+        """Clean URL by removing special characters from start and end"""
+        if not url:
+            return url
+        
+        # Remove special characters from start (common markdown/formatting chars)
+        url = url.lstrip('*_~`[](){}|\\^<>"\'')
+        
+        # Remove special characters from end (punctuation and formatting)
+        url = url.rstrip('*_~`[](){}|\\^<>"\'.,;:)>')
+        
+        return url.strip()
     
     def _find_first_match(self, text, patterns):
         """Find first matching pattern in text"""
