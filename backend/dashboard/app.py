@@ -19,7 +19,7 @@ from src.utils.location_categorizer import LocationCategorizer
 # Enable CORS for all API routes
 app = Flask(__name__)
 # Enable CORS for all API routes
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}})
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 def get_db_connection():
     """Get database connection"""
