@@ -15,19 +15,29 @@ export const api = {
   getDailyStats: () => http('/daily_stats'),
   getGroupsByDate: () => http('/groups_by_date'),
   getGroupDetails: (groupName) => http(`/group_details/${encodeURIComponent(groupName)}`),
-  getBestJobs: (location) => {
-    const url = location ? `/best_jobs?location=${encodeURIComponent(location)}` : '/best_jobs'
-    return http(url)
+  getBestJobs: (location, skills) => {
+    const params = new URLSearchParams()
+    if (location) params.append('location', location)
+    if (skills) params.append('skills', skills)
+    const queryString = params.toString() ? `?${params.toString()}` : ''
+    return http(`/best_jobs${queryString}`)
   },
-  getMessages: (type, location) => {
-    const url = location ? `/messages/${encodeURIComponent(type)}?location=${encodeURIComponent(location)}` : `/messages/${encodeURIComponent(type)}`
-    return http(url)
+  getMessages: (type, location, skills) => {
+    const params = new URLSearchParams()
+    if (location) params.append('location', location)
+    if (skills) params.append('skills', skills)
+    const queryString = params.toString() ? `?${params.toString()}` : ''
+    return http(`/messages/${encodeURIComponent(type)}${queryString}`)
   },
   getAvailableDates: () => http('/available_dates'),
-  getMessagesByDate: (date, type, location) => {
-    const url = location ? `/messages_by_date/${encodeURIComponent(date)}/${encodeURIComponent(type)}?location=${encodeURIComponent(location)}` : `/messages_by_date/${encodeURIComponent(date)}/${encodeURIComponent(type)}`
-    return http(url)
+  getMessagesByDate: (date, type, location, skills) => {
+    const params = new URLSearchParams()
+    if (location) params.append('location', location)
+    if (skills) params.append('skills', skills)
+    const queryString = params.toString() ? `?${params.toString()}` : ''
+    return http(`/messages_by_date/${encodeURIComponent(date)}/${encodeURIComponent(type)}${queryString}`)
   },
+  getSkills: () => http('/skills'),
   getFresherAnalysis: () => http('/fresher_analysis'),
   getMessagesByLocation: (locationFilter) => http(`/messages_by_location/${encodeURIComponent(locationFilter)}`),
 }

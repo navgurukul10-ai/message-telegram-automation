@@ -24,9 +24,18 @@ export default function Messages() {
   const [groupNames, setGroupNames] = React.useState([])
   const [selected, setSelected] = React.useState('')
   const [locationFilter, setLocationFilter] = React.useState('')
+  const [skillsFilter, setSkillsFilter] = React.useState('')
+  const [availableSkills, setAvailableSkills] = React.useState([])
   const [data, setData] = React.useState([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState('')
+
+  React.useEffect(() => {
+    // Load available skills on mount
+    api.getSkills()
+      .then(skills => setAvailableSkills(skills))
+      .catch(err => console.error('Error loading skills:', err))
+  }, [])
 
   React.useEffect(() => {
     let mounted = true
@@ -55,15 +64,17 @@ export default function Messages() {
     return () => { mounted = false }
   }, [selected])
 
-  // Filter messages by location
+  // Filter messages by location and skills
   const filteredData = React.useMemo(() => {
-    if (!locationFilter) return data
+    let filtered = data
     
-    return data.filter(m => {
-      const text = (m.text || '').toLowerCase()
-      const location = (m.location || '').toLowerCase()
-      
-      if (locationFilter === 'pan_india') {
+    // Apply location filter
+    if (locationFilter) {
+      filtered = filtered.filter(m => {
+        const text = (m.text || '').toLowerCase()
+        const location = (m.location || '').toLowerCase()
+        
+        if (locationFilter === 'pan_india') {
         return text.includes('india') || text.includes('indian') || 
                text.includes('bangalore') || text.includes('mumbai') || 
                text.includes('delhi') || text.includes('pune') || 
@@ -82,9 +93,21 @@ export default function Messages() {
                location.includes('usa') || location.includes('uk') ||
                location.includes('singapore') || location.includes('dubai')
       }
-      return true
-    })
-  }, [data, locationFilter])
+        return true
+      })
+    }
+    
+    // Apply skills filter
+    if (skillsFilter) {
+      filtered = filtered.filter(m => {
+        const text = (m.text || '').toLowerCase()
+        const keywords = (m.keywords || '').toLowerCase()
+        return text.includes(skillsFilter.toLowerCase()) || keywords.includes(skillsFilter.toLowerCase())
+      })
+    }
+    
+    return filtered
+  }, [data, locationFilter, skillsFilter])
 
   return (
     <Grid container spacing={2}>
@@ -110,6 +133,25 @@ export default function Messages() {
           </Select>
         </FormControl>
       </Grid>
+      <Grid item xs={12} md={6} lg={4}>
+        <FormControl fullWidth>
+          <InputLabel id="skills-filter-label">Skills</InputLabel>
+          <Select
+            labelId="skills-filter-label"
+            id="skills-filter"
+            value={skillsFilter}
+            label="Skills"
+            onChange={(e) => setSkillsFilter(e.target.value)}
+          >
+            <MenuItem value="">All Skills</MenuItem>
+            {availableSkills.map((skill, idx) => (
+              <MenuItem key={idx} value={skill}>
+                {skill.charAt(0).toUpperCase() + skill.slice(1)}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Grid>
       <Grid item xs={12}>
         {loading ? <Typography>Loading...</Typography> : null}
         {error ? <Typography color="error">{error}</Typography> : null}
@@ -130,7 +172,7 @@ export default function Messages() {
                   skills={skills}
                   description={m.text}
                   applyLink={applyHref}
-                  applyText="View Details"
+                  applyText="Apply Now"
                 />
               </Grid>
             )

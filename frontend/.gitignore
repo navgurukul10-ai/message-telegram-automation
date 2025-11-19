@@ -48,3 +48,6 @@ cypress/videos/
 *.log
 *.tmp
 *.bak
+
+# CSV files
+*.csv

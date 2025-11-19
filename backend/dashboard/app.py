@@ -7,6 +7,7 @@ import sqlite3
 import os
 import sys
 from datetime import datetime, timedelta
+from flask_cors import CORS
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,7 +16,23 @@ from config.settings import PATHS, DATABASE
 from src.services.job_scorer import JobQualityScorer
 from src.utils.location_categorizer import LocationCategorizer
 
+def add_skills_filter(query, skills_filter):
+    """Helper function to add skills filter condition to SQL query"""
+    if skills_filter:
+        skills_list = [s.strip().lower() for s in skills_filter.split(',') if s.strip()]
+        if skills_list:
+            skills_conditions = []
+            for skill in skills_list:
+                # Escape single quotes to prevent SQL injection
+                skill_escaped = skill.replace("'", "''")
+                skills_conditions.append(f"(LOWER(keywords_found) LIKE '%{skill_escaped}%' OR LOWER(message_text) LIKE '%{skill_escaped}%')")
+            query += " AND (" + " OR ".join(skills_conditions) + ")"
+    return query
+
+# Enable CORS for all API routes
 app = Flask(__name__)
+# Enable CORS for all API routes
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 def get_db_connection():
     """Get database connection"""
@@ -42,6 +59,49 @@ def get_db_connection():
 def dashboard():
     """Main dashboard"""
     return render_template('dashboard.html')
+
+@app.route('/api/skills')
+def get_skills():
+    """Get all unique skills from database"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Get skills from all category tables and messages table
+    skills_set = set()
+    
+    # Query messages table for keywords_found
+    cursor.execute("""
+        SELECT DISTINCT keywords_found 
+        FROM messages 
+        WHERE keywords_found IS NOT NULL AND keywords_found != ''
+    """)
+    for row in cursor.fetchall():
+        if row['keywords_found']:
+            # Split comma-separated skills
+            skills = [s.strip().lower() for s in row['keywords_found'].split(',') if s.strip()]
+            skills_set.update(skills)
+    
+    # Query category tables for skills_required
+    for table in ['tech_jobs', 'non_tech_jobs', 'freelance_jobs', 'fresher_jobs']:
+        try:
+            cursor.execute(f"""
+                SELECT DISTINCT skills_required 
+                FROM {table} 
+                WHERE skills_required IS NOT NULL AND skills_required != ''
+            """)
+            for row in cursor.fetchall():
+                if row['skills_required']:
+                    skills = [s.strip().lower() for s in row['skills_required'].split(',') if s.strip()]
+                    skills_set.update(skills)
+        except sqlite3.OperationalError:
+            # Table might not exist, skip
+            continue
+    
+    # Convert to sorted list
+    skills_list = sorted([s for s in skills_set if len(s) > 1])  # Filter out single characters
+    
+    conn.close()
+    return jsonify(skills_list)
 
 @app.route('/api/stats')
 def get_stats():
@@ -227,8 +287,9 @@ def get_best_jobs():
     cursor = conn.cursor()
     categorizer = LocationCategorizer()
     
-    # Get location filter from query parameter
+    # Get filters from query parameters
     location_filter = request.args.get('location', None)
+    skills_filter = request.args.get('skills', None)
     
     # Base query
     query = """
@@ -255,6 +316,9 @@ def get_best_jobs():
             query += " AND (LOWER(job_location) LIKE '%remote%' OR LOWER(job_location) LIKE '%wfh%' OR LOWER(message_text) LIKE '%remote%' OR LOWER(message_text) LIKE '%wfh%')"
         elif location_filter == 'international':
             query += " AND (LOWER(job_location) LIKE '%usa%' OR LOWER(job_location) LIKE '%uk%' OR LOWER(job_location) LIKE '%singapore%' OR LOWER(job_location) LIKE '%dubai%' OR LOWER(job_location) LIKE '%canada%' OR LOWER(job_location) LIKE '%australia%')"
+    
+    # Add skills filter if provided
+    query = add_skills_filter(query, skills_filter)
     
     query += " ORDER BY date DESC LIMIT 200"
     cursor.execute(query)
@@ -340,8 +404,9 @@ def get_messages(job_type):
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Get location filter from query parameter
+    # Get filters from query parameters
     location_filter = request.args.get('location', None)
+    skills_filter = request.args.get('skills', None)
     categorizer = LocationCategorizer()
     
     # Base query parts
@@ -371,6 +436,10 @@ def get_messages(job_type):
                 query += " AND (LOWER(job_location) LIKE '%remote%' OR LOWER(job_location) LIKE '%wfh%' OR LOWER(message_text) LIKE '%remote%' OR LOWER(message_text) LIKE '%wfh%')"
             elif location_filter == 'international':
                 query += " AND (LOWER(job_location) LIKE '%usa%' OR LOWER(job_location) LIKE '%uk%' OR LOWER(job_location) LIKE '%singapore%' OR LOWER(job_location) LIKE '%dubai%' OR LOWER(job_location) LIKE '%canada%' OR LOWER(job_location) LIKE '%australia%')"
+        
+        # Add skills filter if provided
+        query = add_skills_filter(query, skills_filter)
+        
         query += " ORDER BY date DESC"
         cursor.execute(query)
     elif job_type == 'non_tech':
@@ -386,6 +455,10 @@ def get_messages(job_type):
                 query += " AND (LOWER(job_location) LIKE '%remote%' OR LOWER(job_location) LIKE '%wfh%' OR LOWER(message_text) LIKE '%remote%' OR LOWER(message_text) LIKE '%wfh%')"
             elif location_filter == 'international':
                 query += " AND (LOWER(job_location) LIKE '%usa%' OR LOWER(job_location) LIKE '%uk%' OR LOWER(job_location) LIKE '%singapore%' OR LOWER(job_location) LIKE '%dubai%' OR LOWER(job_location) LIKE '%canada%' OR LOWER(job_location) LIKE '%australia%')"
+        
+        # Add skills filter if provided
+        query = add_skills_filter(query, skills_filter)
+        
         query += " ORDER BY date DESC"
         cursor.execute(query)
     elif job_type == 'freelance':
@@ -401,6 +474,10 @@ def get_messages(job_type):
                 query += " AND (LOWER(job_location) LIKE '%remote%' OR LOWER(job_location) LIKE '%wfh%' OR LOWER(message_text) LIKE '%remote%' OR LOWER(message_text) LIKE '%wfh%')"
             elif location_filter == 'international':
                 query += " AND (LOWER(job_location) LIKE '%usa%' OR LOWER(job_location) LIKE '%uk%' OR LOWER(job_location) LIKE '%singapore%' OR LOWER(job_location) LIKE '%dubai%' OR LOWER(job_location) LIKE '%canada%' OR LOWER(job_location) LIKE '%australia%')"
+        
+        # Add skills filter if provided
+        query = add_skills_filter(query, skills_filter)
+        
         query += " ORDER BY date DESC"
         cursor.execute(query)
     elif job_type == 'fresher':
@@ -452,6 +529,10 @@ def get_messages(job_type):
                 query += " AND (LOWER(job_location) LIKE '%remote%' OR LOWER(job_location) LIKE '%wfh%' OR LOWER(message_text) LIKE '%remote%' OR LOWER(message_text) LIKE '%wfh%')"
             elif location_filter == 'international':
                 query += " AND (LOWER(job_location) LIKE '%usa%' OR LOWER(job_location) LIKE '%uk%' OR LOWER(job_location) LIKE '%singapore%' OR LOWER(job_location) LIKE '%dubai%' OR LOWER(job_location) LIKE '%canada%' OR LOWER(job_location) LIKE '%australia%')"
+        
+        # Add skills filter if provided
+        query = add_skills_filter(query, skills_filter)
+        
         query += " ORDER BY date DESC"
         cursor.execute(query)
     else:
@@ -468,6 +549,10 @@ def get_messages(job_type):
                 query += " AND (LOWER(job_location) LIKE '%remote%' OR LOWER(job_location) LIKE '%wfh%' OR LOWER(message_text) LIKE '%remote%' OR LOWER(message_text) LIKE '%wfh%')"
             elif location_filter == 'international':
                 query += " AND (LOWER(job_location) LIKE '%usa%' OR LOWER(job_location) LIKE '%uk%' OR LOWER(job_location) LIKE '%singapore%' OR LOWER(job_location) LIKE '%dubai%' OR LOWER(job_location) LIKE '%canada%' OR LOWER(job_location) LIKE '%australia%')"
+        
+        # Add skills filter if provided
+        query = add_skills_filter(query, skills_filter)
+        
         query += " ORDER BY date DESC"
         cursor.execute(query)
     
@@ -858,8 +943,9 @@ def get_messages_by_date(date, job_type):
     cursor = conn.cursor()
     categorizer = LocationCategorizer()
     
-    # Get location filter from query parameter
+    # Get filters from query parameters
     location_filter = request.args.get('location', None)
+    skills_filter = request.args.get('skills', None)
     
     # Build query based on job type
     if job_type == 'all':
@@ -883,6 +969,10 @@ def get_messages_by_date(date, job_type):
                 query += " AND (LOWER(job_location) LIKE '%remote%' OR LOWER(job_location) LIKE '%wfh%' OR LOWER(message_text) LIKE '%remote%' OR LOWER(message_text) LIKE '%wfh%')"
             elif location_filter == 'international':
                 query += " AND (LOWER(job_location) LIKE '%usa%' OR LOWER(job_location) LIKE '%uk%' OR LOWER(job_location) LIKE '%singapore%' OR LOWER(job_location) LIKE '%dubai%' OR LOWER(job_location) LIKE '%canada%' OR LOWER(job_location) LIKE '%australia%')"
+        
+        # Add skills filter if provided
+        query = add_skills_filter(query, skills_filter)
+        
         query += " ORDER BY date DESC"
     elif job_type == 'tech':
         query = """
@@ -907,6 +997,10 @@ def get_messages_by_date(date, job_type):
                 query += " AND (LOWER(job_location) LIKE '%remote%' OR LOWER(job_location) LIKE '%wfh%' OR LOWER(message_text) LIKE '%remote%' OR LOWER(message_text) LIKE '%wfh%')"
             elif location_filter == 'international':
                 query += " AND (LOWER(job_location) LIKE '%usa%' OR LOWER(job_location) LIKE '%uk%' OR LOWER(job_location) LIKE '%singapore%' OR LOWER(job_location) LIKE '%dubai%' OR LOWER(job_location) LIKE '%canada%' OR LOWER(job_location) LIKE '%australia%')"
+        
+        # Add skills filter if provided
+        query = add_skills_filter(query, skills_filter)
+        
         query += " ORDER BY date DESC"
     elif job_type == 'non_tech':
         query = """
@@ -930,6 +1024,10 @@ def get_messages_by_date(date, job_type):
                 query += " AND (LOWER(job_location) LIKE '%remote%' OR LOWER(job_location) LIKE '%wfh%' OR LOWER(message_text) LIKE '%remote%' OR LOWER(message_text) LIKE '%wfh%')"
             elif location_filter == 'international':
                 query += " AND (LOWER(job_location) LIKE '%usa%' OR LOWER(job_location) LIKE '%uk%' OR LOWER(job_location) LIKE '%singapore%' OR LOWER(job_location) LIKE '%dubai%' OR LOWER(job_location) LIKE '%canada%' OR LOWER(job_location) LIKE '%australia%')"
+        
+        # Add skills filter if provided
+        query = add_skills_filter(query, skills_filter)
+        
         query += " ORDER BY date DESC"
     elif job_type == 'freelance':
         query = """
@@ -953,6 +1051,10 @@ def get_messages_by_date(date, job_type):
                 query += " AND (LOWER(job_location) LIKE '%remote%' OR LOWER(job_location) LIKE '%wfh%' OR LOWER(message_text) LIKE '%remote%' OR LOWER(message_text) LIKE '%wfh%')"
             elif location_filter == 'international':
                 query += " AND (LOWER(job_location) LIKE '%usa%' OR LOWER(job_location) LIKE '%uk%' OR LOWER(job_location) LIKE '%singapore%' OR LOWER(job_location) LIKE '%dubai%' OR LOWER(job_location) LIKE '%canada%' OR LOWER(job_location) LIKE '%australia%')"
+        
+        # Add skills filter if provided
+        query = add_skills_filter(query, skills_filter)
+        
         query += " ORDER BY date DESC"
     elif job_type == 'fresher':
         # Enhanced fresher job detection for date-wise filtering
@@ -1012,6 +1114,10 @@ def get_messages_by_date(date, job_type):
                 query += " AND (LOWER(job_location) LIKE '%remote%' OR LOWER(job_location) LIKE '%wfh%' OR LOWER(message_text) LIKE '%remote%' OR LOWER(message_text) LIKE '%wfh%')"
             elif location_filter == 'international':
                 query += " AND (LOWER(job_location) LIKE '%usa%' OR LOWER(job_location) LIKE '%uk%' OR LOWER(job_location) LIKE '%singapore%' OR LOWER(job_location) LIKE '%dubai%' OR LOWER(job_location) LIKE '%canada%' OR LOWER(job_location) LIKE '%australia%')"
+        
+        # Add skills filter if provided
+        query = add_skills_filter(query, skills_filter)
+        
         query += " ORDER BY date DESC"
     else:
         query = """
@@ -1034,6 +1140,10 @@ def get_messages_by_date(date, job_type):
                 query += " AND (LOWER(job_location) LIKE '%remote%' OR LOWER(job_location) LIKE '%wfh%' OR LOWER(message_text) LIKE '%remote%' OR LOWER(message_text) LIKE '%wfh%')"
             elif location_filter == 'international':
                 query += " AND (LOWER(job_location) LIKE '%usa%' OR LOWER(job_location) LIKE '%uk%' OR LOWER(job_location) LIKE '%singapore%' OR LOWER(job_location) LIKE '%dubai%' OR LOWER(job_location) LIKE '%canada%' OR LOWER(job_location) LIKE '%australia%')"
+        
+        # Add skills filter if provided
+        query = add_skills_filter(query, skills_filter)
+        
         query += " ORDER BY date DESC"
     
     cursor.execute(query, (date,))

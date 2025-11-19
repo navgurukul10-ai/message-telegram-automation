@@ -1,42 +1,159 @@
-# Sensitive Configuration (DO NOT COMMIT!)
-config.py
+# =============================================================================
+# Sensitive Configuration Files (DO NOT COMMIT!)
+# =============================================================================
+config/config.py
+config/*_profile.json
+config/email_config.json
+.env
+.env.local
+.env.*.local
 
-# Telegram Sessions
+# =============================================================================
+# Telegram Sessions (Contains Authentication Data)
+# =============================================================================
 sessions/*.session
 sessions/*.session-journal
+sessions/*.session-*
 
-# Data files
+# =============================================================================
+# Data Files - CSV, Database, JSON Exports
+# =============================================================================
+# CSV files and backups
+*.csv
+*.csv.backup.*
 data/csv/*.csv
-data/json/*.json
+data/csv/*.csv.backup.*
+
+# Database files
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
 data/database/*.db
+data/database/*.db-*
 
-# Logs
+# JSON data exports (keep example files)
+data/json/*.json
+!data/json/*.example.json
+!config/email_config.example.json
+
+# =============================================================================
+# Log Files
+# =============================================================================
+*.log
 logs/*.log
+logs/**/*.log
+output.log
+dashboard_server.log
+*.log.*
 
-# Python
+# =============================================================================
+# Python Cache and Virtual Environment
+# =============================================================================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
 venv/
 env/
 ENV/
+env.bak/
+venv.bak/
+.venv/
 
-# IDE
+# =============================================================================
+# Process and Runtime Files
+# =============================================================================
+*.pid
+*.sock
+pid.txt
+*.lock
+
+# =============================================================================
+# Personal/Resume Files (Sensitive Data)
+# =============================================================================
+resume/
+*.pdf
+!docs/*.pdf
+
+# =============================================================================
+# IDE and Editor Files
+# =============================================================================
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
 
-# OS
+# =============================================================================
+# OS Files
+# =============================================================================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
 
-# Keep directory structure
-!data/csv/.gitkeep
-!data/json/.gitkeep
-!data/database/.gitkeep
-!logs/.gitkeep
-!sessions/.gitkeep
+# =============================================================================
+# Temporary Files
+# =============================================================================
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+*.swp
+*~
+
+# =============================================================================
+# AWS and Deployment Files (if any)
+# =============================================================================
+.aws/
+*.pem
+*.key
+
+# =============================================================================
+# Keep Directory Structure (Optional - uncomment if needed)
+# =============================================================================
+# !data/csv/.gitkeep
+# !data/json/.gitkeep
+# !data/database/.gitkeep
+# !logs/.gitkeep
+# !sessions/.gitkeep
+
+# =============================================================================
+# Keep Template and Example Files
+# =============================================================================
+!config/config_template.py
+!config/email_config.example.json
+!env.example
 
