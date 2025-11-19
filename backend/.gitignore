@@ -6,7 +6,8 @@ sessions/*.session
 sessions/*.session-journal
 
 # Data files
-data/csv/*.csv
+# Ignore all CSV files anywhere in the project
+*.csv
 data/json/*.json
 data/database/*.db
 

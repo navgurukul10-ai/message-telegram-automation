@@ -1,5 +1,5 @@
 import React from 'react'
-import { Card, CardContent, Typography, Chip, Stack, Box, Button, Grid } from '@mui/material'
+import { Card, CardContent, Typography, Chip, Stack, Box, Button, Grid, Link } from '@mui/material'
 import BusinessIcon from '@mui/icons-material/Business'
 import WorkIcon from '@mui/icons-material/Work'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
@@ -19,8 +19,64 @@ export default function JobMessageCard({
   skills,
   description,
   applyLink,
-  applyText = 'View Details'
+  applyText = 'Apply Now'
 }) {
+  // Convert text to JSX with clickable links
+  const renderMessageWithLinks = (text) => {
+    if (!text) return null
+    
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi
+    const parts = []
+    let lastIndex = 0
+    let match
+    let hasLinks = false
+    
+    // Reset regex lastIndex to avoid issues with global regex
+    urlRegex.lastIndex = 0
+    
+    while ((match = urlRegex.exec(text)) !== null) {
+      hasLinks = true
+      // Add text before the link
+      if (match.index > lastIndex) {
+        parts.push(text.substring(lastIndex, match.index))
+      }
+      
+      // Add the link
+      let url = match[0].trim()
+      // Remove trailing punctuation
+      url = url.replace(/[)>.,;:]+$/, '')
+      // Add protocol if missing
+      if (url.startsWith('www.')) {
+        url = 'https://' + url
+      }
+      
+      parts.push(
+        <Link
+          key={match.index}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          sx={{ color: '#1976d2', textDecoration: 'underline' }}
+        >
+          {match[0].replace(/[)>.,;:]+$/, '')}
+        </Link>
+      )
+      
+      lastIndex = match.index + match[0].length
+    }
+    
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex))
+    }
+    
+    // If no links found, return the text as is
+    if (!hasLinks) {
+      return text
+    }
+    
+    return parts.length > 0 ? parts : text
+  }
   // Format job type for display
   const formatJobType = (type) => {
     if (!type) return null
@@ -45,9 +101,10 @@ export default function JobMessageCard({
       boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
       height: '100%',
       display: 'flex',
-      flexDirection: 'column'
+      flexDirection: 'column',
+      overflow: 'hidden'
     }}>
-      <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+      <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', p: 2 }}>
         {/* Company Name & Job Title */}
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
           <BusinessIcon color="action" sx={{ mr: 1, fontSize: '1.2rem' }} />
@@ -141,24 +198,43 @@ export default function JobMessageCard({
           </Stack>
         )}
 
-        {/* Job Description Snippet */}
+        {/* Job Description - Full Message with Scrollable Area */}
         {description && (
-          <Typography 
-            variant="body2" 
-            color="text.secondary" 
+          <Box 
             sx={{ 
               mb: 2, 
-              whiteSpace: 'pre-wrap',
               flexGrow: 1,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              display: '-webkit-box',
-              WebkitLineClamp: 3,
-              WebkitBoxOrient: 'vertical'
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              minHeight: 0,
+              maxHeight: '300px',
+              '&::-webkit-scrollbar': {
+                width: '6px',
+              },
+              '&::-webkit-scrollbar-track': {
+                background: '#f1f1f1',
+                borderRadius: '10px',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                background: '#888',
+                borderRadius: '10px',
+                '&:hover': {
+                  background: '#555',
+                },
+              },
             }}
           >
-            {description.length > 200 ? `${description.slice(0, 200)}...` : description}
-          </Typography>
+            <Typography 
+              variant="body2" 
+              color="text.secondary" 
+              sx={{ 
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {renderMessageWithLinks(description)}
+            </Typography>
+          </Box>
         )}
 
         {/* Action Button */}
