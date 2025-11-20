@@ -21,6 +21,19 @@ class LinkExtractor:
     def __init__(self):
         self.db_path = os.path.join(PATHS['database'], DATABASE['name'])
     
+    def _clean_url(self, url: str) -> str:
+        """Clean URL by removing special characters from start and end"""
+        if not url:
+            return url
+        
+        # Remove special characters from start (common markdown/formatting chars)
+        url = url.lstrip('*_~`[](){}|\\^<>"\'')
+        
+        # Remove special characters from end (punctuation and formatting)
+        url = url.rstrip('*_~`[](){}|\\^<>"\'.,;:)>')
+        
+        return url.strip()
+    
     def extract_links_from_message(self, message_text: str) -> Dict[str, any]:
         """Extract all types of application info from message"""
         
@@ -34,7 +47,7 @@ class LinkExtractor:
         # Extract URLs
         url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
         urls = re.findall(url_pattern, message_text, re.IGNORECASE)
-        result['urls'] = [url.rstrip('.,;:)>') for url in urls]
+        result['urls'] = [self._clean_url(url) for url in urls]
         
         # Extract emails
         email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
@@ -44,6 +57,8 @@ class LinkExtractor:
         # Categorize application type
         if urls:
             for url in result['urls']:
+                # Clean the URL before processing
+                url = self._clean_url(url)
                 url_lower = url.lower()
                 
                 # LinkedIn

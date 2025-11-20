@@ -11,12 +11,25 @@ const TYPES = [
   { key: 'fresher', label: 'Fresher' },
 ]
 
+// Clean URL by removing special characters from start and end
+function cleanUrl(url) {
+  if (!url) return url
+  
+  // Remove special characters from start (common markdown/formatting chars)
+  url = url.replace(/^[*_~`\[\](){}|\\^<>"']+/, '')
+  
+  // Remove special characters from end (punctuation and formatting)
+  url = url.replace(/[*_~`\[\](){}|\\^<>"',.;:)>]+$/, '')
+  
+  return url.trim()
+}
+
 // Extract apply link from message text
 function extractApplyLink(text) {
   if (!text) return null
   const urlMatch = text.match(/(https?:\/\/\S+|www\.\S+)/i)
   if (urlMatch) {
-    let link = urlMatch[1].trim().replace(/[)>.,;:]+$/, '')
+    let link = cleanUrl(urlMatch[1].trim())
     if (link.startsWith('http://') || link.startsWith('https://') || link.startsWith('www.')) {
       if (link.startsWith('www.')) {
         link = 'https://' + link

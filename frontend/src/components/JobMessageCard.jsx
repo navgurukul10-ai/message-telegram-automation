@@ -43,8 +43,10 @@ export default function JobMessageCard({
       
       // Add the link
       let url = match[0].trim()
-      // Remove trailing punctuation
-      url = url.replace(/[)>.,;:]+$/, '')
+      // Remove special characters from start and end
+      url = url.replace(/^[*_~`\[\](){}|\\^<>"']+/, '')
+      url = url.replace(/[*_~`\[\](){}|\\^<>"',.;:)>]+$/, '')
+      url = url.trim()
       // Add protocol if missing
       if (url.startsWith('www.')) {
         url = 'https://' + url
@@ -58,7 +60,7 @@ export default function JobMessageCard({
           rel="noopener noreferrer"
           sx={{ color: '#1976d2', textDecoration: 'underline' }}
         >
-          {match[0].replace(/[)>.,;:]+$/, '')}
+          {match[0].replace(/^[*_~`\[\](){}|\\^<>"']+/, '').replace(/[*_~`\[\](){}|\\^<>"',.;:)>]+$/, '').trim()}
         </Link>
       )
       
