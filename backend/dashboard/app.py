@@ -15,6 +15,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import PATHS, DATABASE
 from src.services.job_scorer import JobQualityScorer
 from src.utils.location_categorizer import LocationCategorizer
+from src.utils.logger import get_logger
+
+logger = get_logger('dashboard')
 
 def add_skills_filter(query, skills_filter):
     """Helper function to add skills filter condition to SQL query"""
@@ -1174,6 +1177,419 @@ def get_messages_by_date(date, job_type):
     
     conn.close()
     return jsonify(messages)
+
+# ============================================================================
+# STUDENT MANAGEMENT API ENDPOINTS
+# ============================================================================
+
+@app.route('/api/students')
+def get_students():
+    """Get all students with optional filters"""
+    from flask import request
+    from src.services.data_aggregator import DataAggregator
+    
+    aggregator = DataAggregator()
+    
+    filters = {}
+    if request.args.get('campus'):
+        filters['campus_name'] = request.args.get('campus')
+    if request.args.get('status'):
+        filters['status'] = request.args.get('status')
+    if request.args.get('category'):
+        filters['category'] = request.args.get('category')
+    
+    students = aggregator.get_all_students(filters)
+    return jsonify(students)
+
+@app.route('/api/students/<student_id>')
+def get_student(student_id):
+    """Get a single student by student_id with all details"""
+    from src.services.data_aggregator import DataAggregator
+    
+    aggregator = DataAggregator()
+    student = aggregator.get_student_by_id(student_id)
+    
+    if not student:
+        return jsonify({'status': 'error', 'error': 'Student not found'}), 404
+    
+    return jsonify(student)
+
+@app.route('/api/students/upload', methods=['POST'])
+def upload_students():
+    """Upload student data from file"""
+    from flask import request
+    from werkzeug.utils import secure_filename
+    import os
+    import traceback
+    
+    try:
+        if 'file' not in request.files:
+            return jsonify({'status': 'error', 'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        campus_name = request.form.get('campus_name') or None
+        
+        if file.filename == '':
+            return jsonify({'status': 'error', 'error': 'No file selected'}), 400
+        
+        # Save uploaded file
+        upload_dir = os.path.join(PATHS['data'], 'uploads')
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(upload_dir, filename)
+        file.save(filepath)
+        
+        # Ensure database tables exist
+        try:
+            from src.storage.database import DatabaseHandler
+            db_handler = DatabaseHandler()
+            db_handler.create_tables()
+        except Exception as db_error:
+            error_msg = f"Database initialization failed: {str(db_error)}"
+            print(f"ERROR: {error_msg}")
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            return jsonify({'status': 'error', 'error': error_msg}), 500
+        
+        # Process file based on extension
+        from src.services.data_aggregator import DataAggregator
+        aggregator = DataAggregator()
+        
+        if filename.endswith('.csv'):
+            result = aggregator.aggregate_from_csv(filepath, campus_name)
+        elif filename.endswith(('.xlsx', '.xls')):
+            result = aggregator.aggregate_from_excel(filepath, campus_name=campus_name)
+        elif filename.endswith('.json'):
+            result = aggregator.aggregate_from_json(filepath, campus_name)
+        else:
+            # Clean up uploaded file
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            return jsonify({'status': 'error', 'error': 'Unsupported file format. Supported: CSV, Excel (.xlsx, .xls), JSON'}), 400
+        
+        # Update campus submission if successful
+        if result.get('status') == 'success' and campus_name:
+            try:
+                from src.services.campus_tracker import CampusTracker
+                tracker = CampusTracker()
+                # Update by campus name
+                tracker.update_campus_submission(campus_name, by_name=True)
+            except Exception as e:
+                # Log but don't fail the upload if campus update fails
+                logger.warning(f"Failed to update campus submission: {e}")
+        
+        # Clean up uploaded file after processing
+        try:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+        except:
+            pass
+        
+        return jsonify(result)
+        
+    except ImportError as e:
+        error_msg = f"Missing dependency: {str(e)}. Please install required packages: pip install pandas openpyxl"
+        print(f"ERROR: {error_msg}")  # Fallback if logger not available
+        try:
+            logger.error(error_msg)
+        except:
+            pass
+        return jsonify({'status': 'error', 'error': error_msg}), 500
+    except Exception as e:
+        error_msg = f"Upload failed: {str(e)}"
+        error_trace = traceback.format_exc()
+        print(f"ERROR in upload_students: {error_msg}\n{error_trace}")  # Fallback if logger not available
+        try:
+            logger.error(f"Error in upload_students: {error_msg}\n{error_trace}")
+        except:
+            pass
+        # Return detailed error in development, generic in production
+        return jsonify({
+            'status': 'error', 
+            'error': error_msg,
+            'traceback': error_trace
+        }), 500
+
+@app.route('/api/students/<student_id>/analyze', methods=['POST'])
+def analyze_student_resume(student_id):
+    """Analyze student resume using Claude API"""
+    from src.services.claude_service import ClaudeService
+    from src.services.data_aggregator import DataAggregator
+    
+    aggregator = DataAggregator()
+    students = aggregator.get_all_students({'student_id': student_id})
+    
+    if not students:
+        return jsonify({'status': 'error', 'error': 'Student not found'}), 404
+    
+    student = students[0]
+    
+    # Get resume text (from URL or existing text)
+    resume_text = request.json.get('resume_text') if request.json else None
+    resume_url = student.get('resume_url')
+    
+    # If no resume text but have URL, fetch it
+    if not resume_text and resume_url:
+        try:
+            from src.utils.resume_fetcher import ResumeFetcher
+            fetcher = ResumeFetcher()
+            resume_text = fetcher.fetch_resume_text(resume_url)
+            
+            if resume_text:
+                # Store fetched resume text
+                conn = sqlite3.connect(aggregator.db_path)
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE students
+                    SET resume_text = ?
+                    WHERE student_id = ?
+                ''', (resume_text[:50000], student_id))
+                conn.commit()
+                conn.close()
+            else:
+                return jsonify({'status': 'error', 'error': 'Could not fetch resume from URL'}), 400
+        except Exception as e:
+            return jsonify({'status': 'error', 'error': f'Failed to fetch resume: {str(e)}'}), 400
+    
+    # Use existing resume text if available
+    if not resume_text:
+        resume_text = student.get('resume_text')
+    
+    if not resume_text:
+        return jsonify({'status': 'error', 'error': 'No resume text available. Please provide resume_text or resume_url.'}), 400
+    
+    try:
+        claude_service = ClaudeService()
+        result = claude_service.analyze_and_categorize(resume_text, student_id, student)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
+@app.route('/api/students/export', methods=['GET'])
+def export_students():
+    """Export students to CSV or Excel"""
+    from flask import request, send_file
+    from src.services.data_aggregator import DataAggregator
+    import os
+    
+    format_type = request.args.get('format', 'csv')  # csv or excel
+    filters = {}
+    
+    if request.args.get('campus'):
+        filters['campus_name'] = request.args.get('campus')
+    if request.args.get('status'):
+        filters['status'] = request.args.get('status')
+    if request.args.get('category'):
+        filters['category'] = request.args.get('category')
+    
+    aggregator = DataAggregator()
+    export_dir = os.path.join(PATHS['data'], 'exports')
+    os.makedirs(export_dir, exist_ok=True)
+    
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    
+    if format_type == 'excel':
+        filename = f'students_export_{timestamp}.xlsx'
+        filepath = os.path.join(export_dir, filename)
+        if aggregator.export_to_excel(filepath, filters):
+            return send_file(filepath, as_attachment=True, download_name=filename)
+    else:
+        filename = f'students_export_{timestamp}.csv'
+        filepath = os.path.join(export_dir, filename)
+        if aggregator.export_to_csv(filepath, filters):
+            return send_file(filepath, as_attachment=True, download_name=filename)
+    
+    return jsonify({'status': 'error', 'error': 'Export failed'}), 500
+
+# ============================================================================
+# CAMPUS MANAGEMENT API ENDPOINTS
+# ============================================================================
+
+@app.route('/api/campuses')
+def get_campuses():
+    """Get all campuses with status"""
+    from src.services.campus_tracker import CampusTracker
+    
+    tracker = CampusTracker()
+    campuses = tracker.get_campus_status()
+    return jsonify(campuses)
+
+@app.route('/api/campuses', methods=['POST'])
+def register_campus():
+    """Register a new campus"""
+    from src.services.campus_tracker import CampusTracker
+    
+    data = request.json
+    tracker = CampusTracker()
+    
+    result = tracker.register_campus(
+        campus_code=data.get('campus_code'),
+        campus_name=data.get('campus_name'),
+        location=data.get('location'),
+        contact_person=data.get('contact_person'),
+        contact_email=data.get('contact_email'),
+        contact_phone=data.get('contact_phone'),
+        expected_submission_date=data.get('expected_submission_date')
+    )
+    
+    return jsonify(result)
+
+@app.route('/api/campuses/<campus_code>/status')
+def get_campus_status(campus_code):
+    """Get status of a specific campus"""
+    from src.services.campus_tracker import CampusTracker
+    
+    tracker = CampusTracker()
+    campuses = tracker.get_campus_status(campus_code)
+    
+    if campuses:
+        return jsonify(campuses[0])
+    return jsonify({'status': 'error', 'error': 'Campus not found'}), 404
+
+@app.route('/api/campuses/dashboard-stats')
+def get_campus_dashboard_stats():
+    """Get dashboard statistics"""
+    from src.services.campus_tracker import CampusTracker
+    
+    tracker = CampusTracker()
+    stats = tracker.get_dashboard_stats()
+    return jsonify(stats)
+
+# ============================================================================
+# FOLLOW-UP MANAGEMENT API ENDPOINTS
+# ============================================================================
+
+@app.route('/api/follow-ups')
+def get_follow_ups():
+    """Get all pending follow-ups"""
+    from src.services.campus_tracker import CampusTracker
+    
+    tracker = CampusTracker()
+    follow_ups = tracker.get_pending_follow_ups()
+    return jsonify(follow_ups)
+
+@app.route('/api/follow-ups', methods=['POST'])
+def create_follow_up():
+    """Create a new follow-up"""
+    from src.services.campus_tracker import CampusTracker
+    
+    data = request.json
+    tracker = CampusTracker()
+    
+    result = tracker.create_follow_up(
+        campus_code=data.get('campus_code'),
+        follow_up_type=data.get('follow_up_type', 'email'),
+        priority=data.get('priority', 'medium'),
+        scheduled_date=data.get('scheduled_date'),
+        notes=data.get('notes')
+    )
+    
+    return jsonify(result)
+
+@app.route('/api/follow-ups/<int:follow_up_id>/complete', methods=['POST'])
+def complete_follow_up(follow_up_id):
+    """Mark a follow-up as completed"""
+    from src.services.campus_tracker import CampusTracker
+    
+    data = request.json or {}
+    tracker = CampusTracker()
+    
+    result = tracker.complete_follow_up(follow_up_id, data.get('notes'))
+    return jsonify(result)
+
+@app.route('/api/follow-ups/auto-create', methods=['POST'])
+def auto_create_follow_ups():
+    """Automatically create follow-ups for overdue campuses"""
+    from src.services.campus_tracker import CampusTracker
+    
+    tracker = CampusTracker()
+    result = tracker.auto_create_follow_ups_for_overdue()
+    return jsonify(result)
+
+@app.route('/api/students/batch-analyze-resumes', methods=['POST'])
+def batch_analyze_resumes():
+    """Batch analyze resumes for all students with resume URLs but no analysis"""
+    from src.services.data_aggregator import DataAggregator
+    from src.utils.resume_fetcher import ResumeFetcher
+    from src.services.claude_service import ClaudeService
+    import sqlite3
+    
+    try:
+        aggregator = DataAggregator()
+        fetcher = ResumeFetcher()
+        
+        # Get students with resume URLs but no resume_text or category
+        conn = sqlite3.connect(aggregator.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT student_id, resume_url, name
+            FROM students
+            WHERE resume_url IS NOT NULL 
+            AND resume_url != ''
+            AND (resume_text IS NULL OR resume_text = '' OR category IS NULL)
+        ''')
+        
+        students = cursor.fetchall()
+        conn.close()
+        
+        analyzed = 0
+        failed = 0
+        errors = []
+        
+        for student in students:
+            try:
+                student_id = student['student_id']
+                resume_url = student['resume_url']
+                
+                # Fetch resume
+                resume_text = fetcher.fetch_resume_text(resume_url)
+                if not resume_text:
+                    failed += 1
+                    errors.append(f"{student_id}: Could not fetch resume")
+                    continue
+                
+                # Store resume text
+                conn = sqlite3.connect(aggregator.db_path)
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE students
+                    SET resume_text = ?
+                    WHERE student_id = ?
+                ''', (resume_text[:50000], student_id))
+                conn.commit()
+                conn.close()
+                
+                # Analyze with Claude
+                try:
+                    claude_service = ClaudeService()
+                    student_dict = dict(student)
+                    result = claude_service.analyze_and_categorize(resume_text, student_id, student_dict)
+                    if result.get('status') == 'success':
+                        analyzed += 1
+                    else:
+                        failed += 1
+                        errors.append(f"{student_id}: Analysis failed")
+                except Exception as e:
+                    failed += 1
+                    errors.append(f"{student_id}: {str(e)}")
+                    
+            except Exception as e:
+                failed += 1
+                errors.append(f"{student['student_id']}: {str(e)}")
+        
+        return jsonify({
+            'status': 'success',
+            'total': len(students),
+            'analyzed': analyzed,
+            'failed': failed,
+            'errors': errors[:10]  # Limit errors to first 10
+        })
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'error': str(e)}), 500
 
 if __name__ == '__main__':
     print("="*60)

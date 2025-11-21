@@ -219,6 +219,148 @@ class DatabaseHandler:
             )
         ''')
         
+        # Student Management Tables
+        # Students table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS students (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                email TEXT,
+                phone TEXT,
+                campus_id INTEGER,
+                campus_name TEXT,
+                resume_url TEXT,
+                resume_text TEXT,
+                
+                -- Extracted from Resume (via Claude)
+                skills TEXT,  -- JSON array of skills
+                experience_level TEXT,  -- fresher, junior, mid, senior
+                years_of_experience REAL DEFAULT 0,
+                projects TEXT,  -- JSON array of projects
+                certifications TEXT,  -- JSON array of certifications
+                education TEXT,  -- JSON array of education
+                languages TEXT,  -- JSON array of languages
+                
+                -- AI Categorization (via Claude)
+                category TEXT,  -- job-ready, needs-training, advanced, etc.
+                category_confidence REAL DEFAULT 0.0,
+                category_reasoning TEXT,
+                
+                -- Status
+                status TEXT DEFAULT 'active',  -- active, placed, inactive
+                placement_status TEXT,  -- placed, seeking, not-seeking
+                
+                -- Metadata
+                data_source TEXT,  -- csv, api, manual, etc.
+                source_file TEXT,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                
+                FOREIGN KEY (campus_id) REFERENCES campuses(id)
+            )
+        ''')
+        
+        # Campuses table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS campuses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                campus_code TEXT UNIQUE NOT NULL,
+                campus_name TEXT NOT NULL,
+                location TEXT,
+                contact_person TEXT,
+                contact_email TEXT,
+                contact_phone TEXT,
+                
+                -- Submission tracking
+                expected_submission_date DATE,
+                last_submission_date DATE,
+                submission_status TEXT DEFAULT 'pending',  -- pending, submitted, overdue
+                submission_count INTEGER DEFAULT 0,
+                
+                -- Metrics
+                total_students INTEGER DEFAULT 0,
+                students_submitted INTEGER DEFAULT 0,
+                data_completeness REAL DEFAULT 0.0,  -- 0-100%
+                
+                -- Follow-up tracking
+                last_follow_up_date DATE,
+                follow_up_count INTEGER DEFAULT 0,
+                next_follow_up_date DATE,
+                
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Follow-ups table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS follow_ups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                campus_id INTEGER NOT NULL,
+                campus_name TEXT NOT NULL,
+                follow_up_type TEXT NOT NULL,  -- email, call, reminder, etc.
+                status TEXT DEFAULT 'pending',  -- pending, completed, cancelled
+                priority TEXT DEFAULT 'medium',  -- low, medium, high, urgent
+                
+                scheduled_date DATE NOT NULL,
+                completed_date DATE,
+                notes TEXT,
+                
+                -- Notification
+                notification_sent BOOLEAN DEFAULT 0,
+                notification_date TIMESTAMP,
+                
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP,
+                
+                FOREIGN KEY (campus_id) REFERENCES campuses(id)
+            )
+        ''')
+        
+        # Data aggregation logs
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS data_aggregation_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                aggregation_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                source_type TEXT NOT NULL,  -- csv, api, database, etc.
+                source_path TEXT,
+                records_processed INTEGER DEFAULT 0,
+                records_added INTEGER DEFAULT 0,
+                records_updated INTEGER DEFAULT 0,
+                records_skipped INTEGER DEFAULT 0,
+                errors TEXT,  -- JSON array of errors
+                status TEXT DEFAULT 'completed',  -- completed, failed, partial
+                execution_time_seconds REAL
+            )
+        ''')
+        
+        # Resume analysis logs
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS resume_analysis_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT NOT NULL,
+                analysis_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                claude_model TEXT,  -- claude-3-opus, claude-3-sonnet, etc.
+                extraction_status TEXT,  -- success, failed, partial
+                categorization_status TEXT,  -- success, failed, partial
+                tokens_used INTEGER,
+                cost_usd REAL,
+                extraction_result TEXT,  -- JSON
+                categorization_result TEXT,  -- JSON
+                error_message TEXT,
+                processing_time_seconds REAL
+            )
+        ''')
+        
+        # Create indexes for better query performance
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_students_campus ON students(campus_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_students_status ON students(status)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_students_category ON students(category)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_campuses_status ON campuses(submission_status)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_follow_ups_campus ON follow_ups(campus_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_follow_ups_status ON follow_ups(status)')
+        
         conn.commit()
         conn.close()
         logger.info("Database tables created successfully")
