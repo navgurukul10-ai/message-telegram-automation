@@ -8,6 +8,9 @@ import FresherAnalysis from './pages/FresherAnalysis'
 import Groups from './pages/Groups'
 import ByDate from './pages/ByDate'
 import GroupDetails from './pages/GroupDetails'
+import Students from './pages/Students'
+import StudentDetails from './pages/StudentDetails'
+import CampusDashboard from './pages/CampusDashboard'
 
 export default function App() {
   return (
@@ -20,6 +23,9 @@ export default function App() {
         <Route path="/groups" element={<Groups />} />
         <Route path="/groups/:name" element={<GroupDetails />} />
         <Route path="/by-date" element={<ByDate />} />
+        <Route path="/students" element={<Students />} />
+        <Route path="/students/:studentId" element={<StudentDetails />} />
+        <Route path="/campuses" element={<CampusDashboard />} />
       </Routes>
     </Layout>
   )

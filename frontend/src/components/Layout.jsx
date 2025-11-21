@@ -10,6 +10,8 @@ import WorkIcon from '@mui/icons-material/Work'
 import StarIcon from '@mui/icons-material/Star'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 import GroupsIcon from '@mui/icons-material/Groups'
+import SchoolIcon from '@mui/icons-material/School'
+import LocationOnIcon from '@mui/icons-material/LocationOn'
 import MenuIcon from '@mui/icons-material/Menu'
 import DarkModeIcon from '@mui/icons-material/DarkMode'
 import LightModeIcon from '@mui/icons-material/LightMode'
@@ -24,6 +26,8 @@ const nav = [
   { to: '/fresher-analysis', icon: <InsightsIcon />, label: 'Fresher Analysis' },
   { to: '/by-date', icon: <CalendarMonthIcon />, label: 'By Date' },
   { to: '/groups', icon: <GroupsIcon />, label: 'Groups by Date' },
+  { to: '/students', icon: <SchoolIcon />, label: 'Students' },
+  { to: '/campuses', icon: <LocationOnIcon />, label: 'Campus Dashboard' },
 ]
 
 export default function Layout({ children }) {
